@@ -1,0 +1,101 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@keyframes floatLogo {
+  0%,
+  100% {
+    transform: translateY(0px);
+  }
+
+  50% {
+    transform: translateY(-10px);
+  }
+}
+
+@keyframes polaroidDriftIn {
+  0% {
+    opacity: 0;
+    transform: translate3d(var(--polaroid-start-x, 0), 34px, -40px) rotate(var(--polaroid-start-rotation, 0deg))
+      scale(var(--polaroid-start-scale, 0.88));
+    filter: blur(var(--polaroid-start-blur, 10px));
+  }
+
+  45% {
+    opacity: 0.9;
+    transform: translate3d(calc(var(--polaroid-start-x, 0) * 0.28), 10px, -8px) rotate(calc(var(--polaroid-rotation, 0deg) * 0.72))
+      scale(calc(var(--polaroid-scale, 1) * 0.97));
+    filter: blur(var(--polaroid-mid-blur, 4px));
+  }
+
+  100% {
+    opacity: 1;
+    transform: translate3d(0, 0, 0) rotate(var(--polaroid-rotation, 0deg)) scale(var(--polaroid-scale, 1));
+    filter: blur(0);
+  }
+}
+
+@keyframes polaroidFloat {
+  0%,
+  100% {
+    transform: translate3d(0, 0, 0) rotate(var(--polaroid-rotation, 0deg)) scale(var(--polaroid-scale, 1));
+  }
+
+  50% {
+    transform: translate3d(0, -6px, 0) rotate(calc(var(--polaroid-rotation, 0deg) + 0.5deg))
+      scale(calc(var(--polaroid-scale, 1) * 1.01));
+  }
+}
+
+@keyframes polaroidFadeBack {
+  0% {
+    opacity: 1;
+    transform: translate3d(0, 0, 0) rotate(var(--polaroid-rotation, 0deg)) scale(var(--polaroid-scale, 1));
+    filter: blur(0);
+  }
+
+  100% {
+    opacity: 0.68;
+    transform: translate3d(var(--polaroid-exit-x, 0), 12px, -24px)
+      rotate(calc(var(--polaroid-rotation, 0deg) * 0.78)) scale(calc(var(--polaroid-scale, 1) * 0.96));
+    filter: blur(2px);
+  }
+}
+
+@keyframes polaroidContentIn {
+  0% {
+    opacity: 0;
+    transform: translate3d(var(--polaroid-content-x, 0), 10px, 0) scale(0.985);
+    filter: blur(var(--polaroid-content-blur, 4px));
+  }
+
+  100% {
+    opacity: 1;
+    transform: translate3d(0, 0, 0) scale(1);
+    filter: blur(0);
+  }
+}
+
+:root {
+  --font-sans: "Manrope", "Segoe UI", sans-serif;
+  --font-serif: "DM Serif Display", Georgia, serif;
+  color-scheme: light;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  min-height: 100vh;
+  background: #ffffff;
+  color: #0f172a;
+}
+
+* {
+  border-color: rgba(15, 23, 42, 0.08);
+}
+
+::selection {
+  background: rgba(110, 211, 44, 0.22);
+}

@@ -1,0 +1,243 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+enum UserRole {
+  ADMIN
+}
+
+enum AlbumStatus {
+  DRAFT
+  PUBLISHED
+  HIDDEN
+  ARCHIVED
+}
+
+enum AlbumVisibility {
+  PUBLIC_LINK
+  PASSWORD
+}
+
+enum CoverPosition {
+  TOP
+  CENTER
+  BOTTOM
+}
+
+enum PhotoStatus {
+  PROCESSING
+  READY
+  FAILED
+}
+
+enum DownloadType {
+  SINGLE
+  FAVORITES_ZIP
+  FULL_ZIP
+}
+
+enum JobType {
+  GENERATE_PREVIEW
+  GENERATE_ZIP
+}
+
+enum JobStatus {
+  PENDING
+  RUNNING
+  COMPLETED
+  FAILED
+}
+
+model User {
+  id            String    @id @default(cuid())
+  email         String    @unique
+  name          String?
+  image         String?
+  emailVerified DateTime?
+  role          UserRole  @default(ADMIN)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  accounts      Account[]
+  sessions      Session[]
+  albums        Album[]
+}
+
+model Account {
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String?
+  access_token      String?
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String?
+  session_state     String?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+  user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([provider, providerAccountId])
+  @@index([userId])
+}
+
+model Session {
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([sessionToken])
+  @@index([userId])
+}
+
+model VerificationToken {
+  identifier String
+  token      String
+  expires    DateTime
+
+  @@id([identifier, token])
+}
+
+model Album {
+  id                     String           @id @default(cuid())
+  slug                   String           @unique
+  title                  String
+  clientName             String
+  description            String?
+  eventDate              DateTime?
+  status                 AlbumStatus      @default(DRAFT)
+  visibility             AlbumVisibility  @default(PUBLIC_LINK)
+  coverPosition          CoverPosition    @default(CENTER)
+  coverFocusX            Int              @default(50)
+  coverFocusY            Int              @default(50)
+  passwordHash           String?
+  allowSingleDownload    Boolean          @default(true)
+  allowFavoritesDownload Boolean          @default(true)
+  allowFullDownload      Boolean          @default(false)
+  isFeatured             Boolean          @default(false)
+  createdAt              DateTime         @default(now())
+  updatedAt              DateTime         @updatedAt
+  createdById            String?
+  coverPhotoId           String?          @unique
+  createdBy              User?            @relation(fields: [createdById], references: [id])
+  photos                 Photo[]          @relation("AlbumPhotos")
+  coverPhoto             Photo?           @relation("AlbumCover", fields: [coverPhotoId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+  favorites              Favorite[]
+  downloads              Download[]
+  views                  AlbumView[]
+  jobs                   Job[]
+  favoriteSelections     FavoriteSelection[]
+}
+
+model Photo {
+  id          String      @id @default(cuid())
+  albumId     String
+  filename    String
+  originalKey String
+  previewKey  String?
+  thumbKey    String?
+  capturedAt  DateTime?
+  width       Int?
+  height      Int?
+  sizeBytes   Int?
+  sortOrder   Int         @default(0)
+  status      PhotoStatus @default(PROCESSING)
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+  album       Album       @relation("AlbumPhotos", fields: [albumId], references: [id], onDelete: Cascade)
+  albumCover  Album?      @relation("AlbumCover")
+  favorites   Favorite[]
+  downloads   Download[]
+  selectionItems FavoriteSelectionItem[]
+
+  @@index([albumId, sortOrder])
+}
+
+model FavoriteSelection {
+  id           String                  @id @default(cuid())
+  albumId      String
+  sessionId    String
+  clientName   String
+  message      String?
+  whatsapp     String?
+  createdAt    DateTime                @default(now())
+  updatedAt    DateTime                @updatedAt
+  album        Album                   @relation(fields: [albumId], references: [id], onDelete: Cascade)
+  items        FavoriteSelectionItem[]
+
+  @@index([albumId, createdAt])
+}
+
+model FavoriteSelectionItem {
+  id                   String             @id @default(cuid())
+  favoriteSelectionId  String
+  photoId              String
+  sortOrder            Int
+  createdAt            DateTime           @default(now())
+  favoriteSelection    FavoriteSelection  @relation(fields: [favoriteSelectionId], references: [id], onDelete: Cascade)
+  photo                Photo              @relation(fields: [photoId], references: [id], onDelete: Cascade)
+
+  @@index([favoriteSelectionId, sortOrder])
+  @@unique([favoriteSelectionId, photoId])
+}
+
+model Favorite {
+  id         String   @id @default(cuid())
+  albumId    String
+  photoId    String
+  sessionId  String
+  createdAt  DateTime @default(now())
+  album      Album    @relation(fields: [albumId], references: [id], onDelete: Cascade)
+  photo      Photo    @relation(fields: [photoId], references: [id], onDelete: Cascade)
+
+  @@unique([photoId, sessionId])
+  @@index([albumId, sessionId])
+}
+
+model Download {
+  id         String       @id @default(cuid())
+  albumId    String
+  photoId    String?
+  sessionId  String
+  type       DownloadType
+  createdAt  DateTime     @default(now())
+  album      Album        @relation(fields: [albumId], references: [id], onDelete: Cascade)
+  photo      Photo?       @relation(fields: [photoId], references: [id], onDelete: SetNull)
+
+  @@index([albumId, createdAt])
+}
+
+model AlbumView {
+  id         String   @id @default(cuid())
+  albumId    String
+  sessionId  String
+  createdAt  DateTime @default(now())
+  album      Album    @relation(fields: [albumId], references: [id], onDelete: Cascade)
+
+  @@index([albumId, createdAt])
+}
+
+model Job {
+  id         String    @id @default(cuid())
+  albumId    String?
+  type       JobType
+  status     JobStatus @default(PENDING)
+  payload    Json
+  attempts   Int       @default(0)
+  runAt      DateTime  @default(now())
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+  album      Album?    @relation(fields: [albumId], references: [id], onDelete: Cascade)
+
+  @@index([status, runAt])
+}

@@ -1,0 +1,88 @@
+import { cookies } from "next/headers";
+import { notFound } from "next/navigation";
+
+import { AlbumPasswordGate } from "@/components/gallery/album-password-gate";
+import { GalleryExperience } from "@/components/gallery/gallery-experience";
+import { galleryPhotos } from "@/features/albums/mock-data";
+import { getAlbumAccessCookieName, verifyAlbumAccessToken } from "@/lib/album-access";
+import { getObjectPositionFromFocus } from "@/lib/cover";
+import { buildGalleryPhotosFromAlbum, getAlbumBySlug } from "@/lib/albums";
+import { formatDate } from "@/lib/format";
+import { toMediaRoute } from "@/lib/r2";
+
+export const dynamic = "force-dynamic";
+
+type GalleryPageProps = {
+  params: Promise<{ slug: string }>;
+};
+
+type SearchParams = Promise<Record<string, string | string[] | undefined>>;
+
+export default async function GalleryPage({ params, searchParams }: GalleryPageProps & { searchParams: SearchParams }) {
+  const { slug } = await params;
+  const resolvedSearchParams = await searchParams;
+  const album = await getAlbumBySlug(slug);
+
+  if (!album && slug !== "editorial-demo") {
+    notFound();
+  }
+
+  if (album?.visibility === "PASSWORD" && album.passwordHash) {
+    const cookieStore = await cookies();
+    const accessCookie = cookieStore.get(getAlbumAccessCookieName(slug))?.value;
+    const hasAccess = verifyAlbumAccessToken(slug, album.passwordHash, accessCookie);
+
+    if (!hasAccess) {
+      return <AlbumPasswordGate slug={slug} hasError={resolvedSearchParams.error === "password"} />;
+    }
+  }
+
+  const title = album?.title ?? "Tizzy | Feb26";
+  const clientName = album?.clientName ?? "Sesion editorial";
+  const description =
+    album?.description ?? '"Gracias por tu confianza..." Una galeria ligera y enfocada en disfrutar la seleccion.';
+  const displayPhotos =
+    album && album.photos.length > 0 ? buildGalleryPhotosFromAlbum(title, album.photos) : galleryPhotos;
+  const heroPhoto =
+    album?.coverPhoto
+      ? toMediaRoute(album.coverPhoto.previewKey ?? album.coverPhoto.originalKey)
+      : displayPhotos[0]?.url ?? "https://images.unsplash.com/photo-1519741497674-611481863552?auto=format&fit=crop&w=1600&q=80";
+  const heroPosition = album ? getObjectPositionFromFocus(album.coverFocusX, album.coverFocusY) : "center center";
+
+  return (
+    <div className="space-y-5 md:space-y-10">
+      <section className="space-y-4 rounded-[26px] border border-slate-200 bg-white px-3 py-3 shadow-[0_18px_50px_rgba(15,23,42,0.08)] md:space-y-8 md:rounded-[42px] md:px-6 md:py-6 lg:px-8 lg:py-8">
+        <div
+          className="min-h-[190px] rounded-[20px] bg-cover bg-center shadow-[0_16px_40px_rgba(15,23,42,0.12)] sm:min-h-[320px] md:min-h-[420px] md:rounded-[34px]"
+          style={{ backgroundImage: `url(${heroPhoto})`, backgroundPosition: heroPosition }}
+        />
+        <div className="space-y-3 px-1 text-center md:space-y-5">
+          <div className="flex flex-wrap items-center justify-center gap-3">
+            <span className="rounded-full border border-slate-200 bg-white px-3 py-2 text-[10px] font-extrabold uppercase tracking-[0.22em] text-slate-500 md:px-4 md:text-xs md:tracking-[0.26em]">
+              {formatDate(album?.eventDate)}
+            </span>
+          </div>
+
+          <div className="mx-auto max-w-4xl space-y-2.5 md:space-y-4">
+            <p className="text-[11px] font-black uppercase tracking-[0.24em] text-slate-400 md:text-sm md:tracking-[0.32em]">{clientName}</p>
+            <h1 className="text-[2rem] font-black tracking-tight text-slate-900 sm:text-4xl md:text-7xl">{title}</h1>
+            <p className="mx-auto max-w-3xl text-sm font-medium italic leading-6 text-slate-600 md:text-xl md:leading-9">
+              {description}
+            </p>
+          </div>
+        </div>
+      </section>
+
+      <section className="space-y-6">
+        <GalleryExperience
+          photos={displayPhotos}
+          slug={slug}
+          albumTitle={title}
+          storageKey={`lakja-favorites-${slug}`}
+          allowFavoritesDownload={album?.allowFavoritesDownload ?? true}
+          allowFullDownload={album?.allowFullDownload ?? true}
+        />
+      </section>
+    </div>
+  );
+}
