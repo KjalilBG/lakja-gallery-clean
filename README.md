@@ -1,6 +1,6 @@
-# LaKja.mx Gallery
+# La Kja Gallery
 
-Scaffold inicial para una plataforma de galerias fotograficas premium enfocada en entrega de albumes, favoritas y descargas.
+Plataforma de galerias fotograficas premium enfocada en entrega de albumes, favoritas y descargas.
 
 ## Stack propuesto
 
@@ -54,6 +54,21 @@ Scaffold inicial para una plataforma de galerias fotograficas premium enfocada e
    - `/login`
    - `/admin`
    - una galeria publica con fotos en R2
+
+## Seguridad operativa
+
+- Nunca subas `.env`, `.env.local` ni secretos a Git.
+- Si un secreto se expone, rota primero el servicio afectado y luego actualiza Vercel y tu entorno local.
+- Para Vercel usa `DATABASE_URL` en modo transaccional (`6543`) y `DIRECT_URL` en session mode (`5432`).
+- Si trabajas con Supabase localmente, confirma la conectividad del pooler antes de asumir que el problema es Prisma.
+- Mantén en desuso o privado cualquier repo viejo que haya contenido secretos en su historial.
+
+## Recuperacion de datos
+
+- Las imagenes viven en Cloudflare R2.
+- La metadata principal vive en Supabase.
+- Si necesitas recuperar contenido publicado, importa primero `Album` y luego `Photo`.
+- Despues puedes restaurar `FavoriteSelection`, `FavoriteSelectionItem`, `Favorite`, `AlbumView` y `Download`.
 
 ## Siguiente implementacion recomendada
 
