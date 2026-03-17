@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 import { NextResponse } from "next/server";
 
-import { getServerAuthSession } from "@/lib/auth";
+import { getServerAuthSession, isSuperAdminEmail } from "@/lib/auth";
 
 export async function requireAdminSession(callbackUrl = "/admin") {
   const session = await getServerAuthSession();
@@ -21,4 +21,14 @@ export async function ensureAdminApiRequest() {
   }
 
   return null;
+}
+
+export async function requireSuperAdminSession(callbackUrl = "/admin") {
+  const session = await requireAdminSession(callbackUrl);
+
+  if (!isSuperAdminEmail(session.user?.email)) {
+    redirect("/admin");
+  }
+
+  return session;
 }

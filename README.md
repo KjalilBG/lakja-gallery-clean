@@ -40,6 +40,7 @@ Plataforma de galerias fotograficas premium enfocada en entrega de albumes, favo
    - `GOOGLE_CLIENT_ID`
    - `GOOGLE_CLIENT_SECRET`
    - `ADMIN_EMAILS`
+   - `SUPER_ADMIN_EMAILS`
    - `R2_ACCOUNT_ID`
    - `R2_ACCESS_KEY_ID`
    - `R2_SECRET_ACCESS_KEY`
@@ -62,6 +63,7 @@ Plataforma de galerias fotograficas premium enfocada en entrega de albumes, favo
 - Para Vercel usa `DATABASE_URL` en modo transaccional (`6543`) y `DIRECT_URL` en session mode (`5432`).
 - Si trabajas con Supabase localmente, confirma la conectividad del pooler antes de asumir que el problema es Prisma.
 - Mantén en desuso o privado cualquier repo viejo que haya contenido secretos en su historial.
+- Usa `SUPER_ADMIN_EMAILS` para cerrar pantallas sensibles de branding o configuracion global del sitio.
 
 ## Recuperacion de datos
 

@@ -1,22 +1,22 @@
 import Link from "next/link";
-import { LogOut } from "lucide-react";
 
-import { getServerAuthSession } from "@/lib/auth";
+import { getServerAuthSession, isSuperAdminEmail } from "@/lib/auth";
 import { requireAdminSession } from "@/lib/auth-guard";
 import { LogoMark } from "@/components/ui/logo";
 import { AdminSignOutButton } from "@/components/admin/admin-sign-out-button";
 
 export const dynamic = "force-dynamic";
 
-const adminNav = [
-  { label: "Resumen", href: "/admin" },
-  { label: "Albumes", href: "/admin/albums" },
-  { label: "Nuevo album", href: "/admin/albums/new" }
-];
-
 export default async function AdminLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   await requireAdminSession("/admin");
   const session = await getServerAuthSession();
+  const isSuperAdmin = isSuperAdminEmail(session?.user?.email);
+  const adminNav = [
+    { label: "Resumen", href: "/admin" },
+    { label: "Albumes", href: "/admin/albums" },
+    { label: "Nuevo album", href: "/admin/albums/new" },
+    ...(isSuperAdmin ? [{ label: "Sitio", href: "/admin/site" }] : [])
+  ];
 
   return (
     <div className="grid gap-6 lg:grid-cols-[250px_1fr]">

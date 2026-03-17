@@ -9,6 +9,7 @@ import { getObjectPositionFromFocus } from "@/lib/cover";
 import { buildGalleryPhotosFromAlbum, getAlbumBySlug } from "@/lib/albums";
 import { formatDate } from "@/lib/format";
 import { toMediaRoute } from "@/lib/r2";
+import { getSiteSettings } from "@/lib/site-settings";
 
 export const dynamic = "force-dynamic";
 
@@ -21,7 +22,7 @@ type SearchParams = Promise<Record<string, string | string[] | undefined>>;
 export default async function GalleryPage({ params, searchParams }: GalleryPageProps & { searchParams: SearchParams }) {
   const { slug } = await params;
   const resolvedSearchParams = await searchParams;
-  const album = await getAlbumBySlug(slug);
+  const [album, siteSettings] = await Promise.all([getAlbumBySlug(slug), getSiteSettings()]);
 
   if (!album && slug !== "editorial-demo") {
     notFound();
@@ -81,6 +82,11 @@ export default async function GalleryPage({ params, searchParams }: GalleryPageP
           storageKey={`lakja-favorites-${slug}`}
           allowFavoritesDownload={album?.allowFavoritesDownload ?? true}
           allowFullDownload={album?.allowFullDownload ?? true}
+          instagramUrl={siteSettings.instagramUrl}
+          facebookUrl={siteSettings.facebookUrl}
+          whatsappNumber={siteSettings.whatsappNumber}
+          downloadPopupTitle={siteSettings.downloadPopupTitle}
+          downloadPopupBody={siteSettings.downloadPopupBody}
         />
       </section>
     </div>

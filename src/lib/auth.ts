@@ -7,6 +7,31 @@ const allowedAdminEmails = (process.env.ADMIN_EMAILS ?? "")
   .map((value) => value.trim().toLowerCase())
   .filter(Boolean);
 
+const allowedSuperAdminEmails = (() => {
+  const configuredEmails = (process.env.SUPER_ADMIN_EMAILS ?? "")
+    .split(",")
+    .map((value) => value.trim().toLowerCase())
+    .filter(Boolean);
+
+  if (configuredEmails.length > 0) {
+    return configuredEmails;
+  }
+
+  return allowedAdminEmails.length > 0 ? [allowedAdminEmails[0]] : [];
+})();
+
+export function isSuperAdminEmail(email?: string | null) {
+  if (!email) {
+    return false;
+  }
+
+  if (allowedSuperAdminEmails.length === 0) {
+    return true;
+  }
+
+  return allowedSuperAdminEmails.includes(email.toLowerCase());
+}
+
 export const authOptions: NextAuthOptions = {
   debug: process.env.NODE_ENV === "development",
   logger: {
@@ -70,6 +95,7 @@ export const authOptions: NextAuthOptions = {
       }
 
       token.role = allowedAdminEmails.length === 0 || allowedAdminEmails.includes(token.email.toLowerCase()) ? "ADMIN" : undefined;
+      token.isSuperAdmin = isSuperAdminEmail(token.email);
 
       return token;
     },
@@ -77,6 +103,7 @@ export const authOptions: NextAuthOptions = {
       if (session.user) {
         session.user.id = token.sub ?? session.user.id;
         session.user.role = typeof token.role === "string" ? token.role : "ADMIN";
+        session.user.isSuperAdmin = token.isSuperAdmin === true;
       }
 
       return session;

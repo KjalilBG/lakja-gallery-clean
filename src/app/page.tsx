@@ -4,12 +4,16 @@ import { ArrowRight, Facebook, Instagram, Sparkles } from "lucide-react";
 import { AlbumCard } from "@/components/dashboard/album-card";
 import { HomeShowcaseReel } from "@/components/home/home-showcase-reel";
 import { getPublishedAlbums, getPublishedShowcasePhotos } from "@/lib/albums";
+import { getSiteSettings } from "@/lib/site-settings";
 
 export const dynamic = "force-dynamic";
 
 export default async function HomePage() {
-  const albums = await getPublishedAlbums(6);
-  const showcasePhotos = await getPublishedShowcasePhotos(10);
+  const [albums, showcasePhotos, settings] = await Promise.all([
+    getPublishedAlbums(6),
+    getPublishedShowcasePhotos(10),
+    getSiteSettings()
+  ]);
 
   return (
     <div className="space-y-14 pb-8 pt-6 md:space-y-16 md:pt-10">
@@ -18,20 +22,18 @@ export default async function HomePage() {
           <div className="space-y-6">
             <div className="inline-flex items-center gap-2 rounded-full border border-lime-200 bg-lime-50 px-4 py-2 text-[11px] font-extrabold uppercase tracking-[0.24em] text-lime-700">
               <Sparkles className="size-4" />
-              Estamos construyendo algo especial
+              {settings.homeBadge}
             </div>
 
             <div className="space-y-4">
               <p className="text-center text-xs font-black uppercase tracking-[0.34em] text-slate-400 lg:text-left">
-                Bienvenido a La Kja
+                {settings.homeEyebrow}
               </p>
               <h1 className="text-center text-4xl font-black tracking-tight text-slate-950 md:text-6xl lg:text-left">
-                Una experiencia fotográfica más cercana, más viva y más tuya.
+                {settings.homeTitle}
               </h1>
               <p className="mx-auto max-w-2xl text-center text-base leading-8 text-slate-600 lg:mx-0 lg:text-left">
-                Estamos afinando una nueva casa digital para entregar historias, retratos y eventos con una experiencia
-                mucho más cuidada. Mientras tanto, ya puedes recorrer las galerías publicadas, sentir el estilo de La Kja
-                y escribirme si quieres crear algo juntos.
+                {settings.homeDescription}
               </p>
             </div>
 
@@ -81,7 +83,7 @@ export default async function HomePage() {
         </p>
         <div className="flex items-center justify-center gap-4 text-slate-500">
           <a
-            href="https://instagram.com/lakja.top"
+            href={settings.instagramUrl}
             target="_blank"
             rel="noreferrer"
             className="inline-flex h-12 w-12 items-center justify-center rounded-full border border-slate-200 bg-white transition hover:-translate-y-0.5 hover:border-fuchsia-200 hover:text-fuchsia-600"
@@ -90,7 +92,7 @@ export default async function HomePage() {
             <Instagram className="size-5" />
           </a>
           <a
-            href="https://facebook.com/lakja.top"
+            href={settings.facebookUrl}
             target="_blank"
             rel="noreferrer"
             className="inline-flex h-12 w-12 items-center justify-center rounded-full border border-slate-200 bg-white transition hover:-translate-y-0.5 hover:border-sky-200 hover:text-sky-600"

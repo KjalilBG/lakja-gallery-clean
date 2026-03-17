@@ -20,6 +20,11 @@ type GalleryExperienceProps = {
   storageKey?: string;
   allowFavoritesDownload?: boolean;
   allowFullDownload?: boolean;
+  instagramUrl: string;
+  facebookUrl: string;
+  whatsappNumber: string;
+  downloadPopupTitle: string;
+  downloadPopupBody: string;
 };
 
 export function GalleryExperience({
@@ -28,7 +33,12 @@ export function GalleryExperience({
   albumTitle,
   storageKey = "lakja-gallery-favorites",
   allowFavoritesDownload = false,
-  allowFullDownload = false
+  allowFullDownload = false,
+  instagramUrl,
+  facebookUrl,
+  whatsappNumber,
+  downloadPopupTitle,
+  downloadPopupBody
 }: GalleryExperienceProps) {
   const [activeIndex, setActiveIndex] = useState<number | null>(null);
   const [favoriteIds, setFavoriteIds] = useState<string[]>([]);
@@ -214,7 +224,7 @@ export function GalleryExperience({
         messageLines.push(`Mensaje: ${senderMessage.trim()}`);
       }
 
-      const whatsappUrl = `https://wa.me/522292646327?text=${encodeURIComponent(messageLines.join("\n"))}`;
+      const whatsappUrl = `https://wa.me/${whatsappNumber}?text=${encodeURIComponent(messageLines.join("\n"))}`;
       window.open(whatsappUrl, "_blank", "noopener,noreferrer");
       setShowSendFavorites(false);
       setSenderMessage("");
@@ -440,14 +450,13 @@ export function GalleryExperience({
                 <Instagram className="size-7 sm:size-9" />
               </div>
               <h3 className="mt-5 text-3xl font-black tracking-tight text-slate-900 sm:mt-6 sm:text-4xl">
-                Tu descarga ya comenzó 📸✨
+                {downloadPopupTitle}
               </h3>
               <p className="mt-4 text-sm leading-7 text-slate-600 sm:text-base">
-                Gracias por estar aqui. Si compartes este momento, nos encantara que nos etiquetes y sigas en
-                nuestras redes sociales.
+                {downloadPopupBody}
               </p>
               <div className="mt-7 grid gap-3 sm:grid-cols-2">
-                <a href="https://www.instagram.com/lakja.top" target="_blank" rel="noreferrer" className="block">
+                <a href={instagramUrl} target="_blank" rel="noreferrer" className="block">
                   <button
                     type="button"
                     className="inline-flex w-full items-center justify-center rounded-full bg-[linear-gradient(90deg,#fb923c,#db2777)] px-5 py-4 text-sm font-extrabold uppercase tracking-[0.16em] text-white shadow-[0_14px_28px_rgba(219,39,119,0.22)] transition hover:opacity-95"
@@ -456,7 +465,7 @@ export function GalleryExperience({
                     Instagram
                   </button>
                 </a>
-                <a href="https://www.facebook.com/lakja.top" target="_blank" rel="noreferrer" className="block">
+                <a href={facebookUrl} target="_blank" rel="noreferrer" className="block">
                   <button
                     type="button"
                     className="inline-flex w-full items-center justify-center rounded-full bg-[linear-gradient(90deg,#60a5fa,#2563eb)] px-5 py-4 text-sm font-extrabold uppercase tracking-[0.16em] text-white shadow-[0_14px_28px_rgba(37,99,235,0.22)] transition hover:opacity-95"
@@ -514,7 +523,7 @@ export function GalleryExperience({
                     value={senderWhatsapp}
                     onChange={(event) => setSenderWhatsapp(event.target.value)}
                     className="w-full rounded-[18px] border border-slate-200 bg-slate-50 px-4 py-3 outline-none transition focus:border-lime-400 focus:bg-white"
-                    placeholder="2292646327"
+                    placeholder={whatsappNumber.replace(/^52/, "")}
                   />
                 </label>
                 <label className="space-y-2">

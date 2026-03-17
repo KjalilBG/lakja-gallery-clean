@@ -4,14 +4,15 @@ import { useMemo, useState } from "react";
 import { MessageCircle, Send, X } from "lucide-react";
 import { usePathname } from "next/navigation";
 
-const whatsappNumber = "522292646327";
+type WhatsAppFloatProps = {
+  whatsappNumber: string;
+  defaultMessage: string;
+};
 
-export function WhatsAppFloat() {
+export function WhatsAppFloat({ whatsappNumber, defaultMessage }: WhatsAppFloatProps) {
   const pathname = usePathname();
   const [isOpen, setIsOpen] = useState(false);
-  const [message, setMessage] = useState(
-    "Hola, vi tu galeria en La Kja y me gustaria pedir informacion."
-  );
+  const [message, setMessage] = useState(defaultMessage);
 
   const shouldHide = useMemo(
     () => pathname?.startsWith("/admin") || pathname?.startsWith("/login"),

@@ -241,3 +241,22 @@ model Job {
 
   @@index([status, runAt])
 }
+
+model SiteSettings {
+  id                  String   @id @default("default")
+  shareTitle          String   @default("La Kja | Galerias fotograficas premium")
+  shareDescription    String   @default("Galerias fotograficas premium para clientes y administracion de albumes.")
+  shareImageUrl       String?
+  instagramUrl        String?
+  facebookUrl         String?
+  whatsappNumber      String?
+  whatsappMessage     String?
+  downloadPopupTitle  String   @default("Tu descarga ya comenzo 📸✨")
+  downloadPopupBody   String   @default("Gracias por estar aqui. Comparte este momento, etiquetanos y forma parte de nuestra comunidad.")
+  homeBadge           String   @default("Estamos construyendo algo especial")
+  homeEyebrow         String   @default("Bienvenido a La Kja")
+  homeTitle           String   @default("Una experiencia fotografica mas cercana, mas viva y mas tuya.")
+  homeDescription     String   @default("Estamos afinando una nueva casa digital para entregar historias, retratos y eventos con una experiencia mucho mas cuidada. Mientras tanto, ya puedes recorrer las galerias publicadas, sentir el estilo de La Kja y escribirme si quieres crear algo juntos.")
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+}
