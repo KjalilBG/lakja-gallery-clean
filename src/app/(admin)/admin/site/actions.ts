@@ -5,7 +5,7 @@ import { redirect } from "next/navigation";
 import { z } from "zod";
 
 import { requireSuperAdminSession } from "@/lib/auth-guard";
-import { upsertSiteSettings } from "@/lib/site-settings";
+import { getSiteSettings, upsertSiteSettings } from "@/lib/site-settings";
 
 const optionalUrlSchema = z
   .string()
@@ -14,8 +14,8 @@ const optionalUrlSchema = z
   .refine((value) => !value || /^https?:\/\//i.test(value) || value.startsWith("/"), "Usa una URL absoluta o una ruta que empiece con /.");
 
 const siteSettingsSchema = z.object({
-  shareTitle: z.string().trim().min(8, "Agrega un titulo un poco mas descriptivo."),
-  shareDescription: z.string().trim().min(12, "Agrega una descripcion mas clara para compartir."),
+  shareTitle: z.string().trim().min(3, "Agrega al menos un titulo corto."),
+  shareDescription: z.string().trim().min(6, "Agrega una descripcion breve para compartir."),
   shareImageUrl: optionalUrlSchema,
   instagramUrl: z.string().trim().url("Agrega una URL valida para Instagram."),
   facebookUrl: z.string().trim().url("Agrega una URL valida para Facebook."),
@@ -24,15 +24,15 @@ const siteSettingsSchema = z.object({
     .trim()
     .min(8, "Agrega un numero de WhatsApp valido.")
     .regex(/^\d+$/, "Usa solo numeros en el telefono de WhatsApp."),
-  whatsappMessage: z.string().trim().min(12, "Agrega un mensaje de WhatsApp mas claro."),
-  maintenanceTitle: z.string().trim().min(10, "Agrega un titulo mas claro para mantenimiento."),
-  maintenanceMessage: z.string().trim().min(20, "Agrega un mensaje mas claro para mantenimiento."),
-  downloadPopupTitle: z.string().trim().min(8, "Agrega un titulo mas descriptivo para el popup."),
-  downloadPopupBody: z.string().trim().min(16, "Agrega un mensaje mas claro para el popup."),
-  homeBadge: z.string().trim().min(4, "Agrega un texto corto para la insignia de la home."),
-  homeEyebrow: z.string().trim().min(4, "Agrega un texto superior para la home."),
-  homeTitle: z.string().trim().min(12, "Agrega un titulo principal mas descriptivo."),
-  homeDescription: z.string().trim().min(20, "Agrega una descripcion principal mas completa."),
+  whatsappMessage: z.string().trim().min(4, "Agrega un mensaje corto para WhatsApp."),
+  maintenanceTitle: z.string().trim().min(4, "Agrega un titulo corto para mantenimiento."),
+  maintenanceMessage: z.string().trim().min(8, "Agrega un mensaje breve para mantenimiento."),
+  downloadPopupTitle: z.string().trim().min(3, "Agrega un titulo corto para el popup."),
+  downloadPopupBody: z.string().trim().min(6, "Agrega un mensaje breve para el popup."),
+  homeBadge: z.string().trim().min(2, "Agrega una insignia corta para la home."),
+  homeEyebrow: z.string().trim().min(2, "Agrega un texto superior corto para la home."),
+  homeTitle: z.string().trim().min(6, "Agrega un titulo principal un poco mas claro."),
+  homeDescription: z.string().trim().min(8, "Agrega una descripcion principal breve."),
   featuredAlbumIds: z.array(z.string().trim()).default([]),
   maintenanceMode: z.boolean(),
   showWhatsAppFloat: z.boolean(),
@@ -44,31 +44,52 @@ const siteSettingsSchema = z.object({
 export async function saveSiteSettingsAction(formData: FormData) {
   await requireSuperAdminSession("/admin/site");
 
+  const currentSettings = await getSiteSettings();
+
+  function getTextValue(name: string, fallback: string) {
+    const rawValue = formData.get(name);
+    if (typeof rawValue !== "string") {
+      return fallback;
+    }
+
+    return rawValue;
+  }
+
+  function getCheckboxValue(name: string, fallback: boolean) {
+    if (!formData.has(name)) {
+      return fallback;
+    }
+
+    return formData.get(name) === "on";
+  }
+
+  const featuredAlbumIds = formData.getAll("featuredAlbumIds");
+
   const parsedInput = siteSettingsSchema.safeParse({
-    shareTitle: String(formData.get("shareTitle") ?? ""),
-    shareDescription: String(formData.get("shareDescription") ?? ""),
-    shareImageUrl: String(formData.get("shareImageUrl") ?? ""),
-    instagramUrl: String(formData.get("instagramUrl") ?? ""),
-    facebookUrl: String(formData.get("facebookUrl") ?? ""),
-    whatsappNumber: String(formData.get("whatsappNumber") ?? ""),
-    whatsappMessage: String(formData.get("whatsappMessage") ?? ""),
-    maintenanceTitle: String(formData.get("maintenanceTitle") ?? ""),
-    maintenanceMessage: String(formData.get("maintenanceMessage") ?? ""),
-    downloadPopupTitle: String(formData.get("downloadPopupTitle") ?? ""),
-    downloadPopupBody: String(formData.get("downloadPopupBody") ?? ""),
-    homeBadge: String(formData.get("homeBadge") ?? ""),
-    homeEyebrow: String(formData.get("homeEyebrow") ?? ""),
-    homeTitle: String(formData.get("homeTitle") ?? ""),
-    homeDescription: String(formData.get("homeDescription") ?? ""),
-    featuredAlbumIds: formData
-      .getAll("featuredAlbumIds")
-      .map((value) => String(value).trim())
-      .filter(Boolean),
-    maintenanceMode: formData.get("maintenanceMode") === "on",
-    showWhatsAppFloat: formData.get("showWhatsAppFloat") === "on",
-    downloadsEnabled: formData.get("downloadsEnabled") === "on",
-    favoritesEnabled: formData.get("favoritesEnabled") === "on",
-    downloadPopupEnabled: formData.get("downloadPopupEnabled") === "on"
+    shareTitle: getTextValue("shareTitle", currentSettings.shareTitle),
+    shareDescription: getTextValue("shareDescription", currentSettings.shareDescription),
+    shareImageUrl: getTextValue("shareImageUrl", currentSettings.shareImageUrl ?? ""),
+    instagramUrl: getTextValue("instagramUrl", currentSettings.instagramUrl),
+    facebookUrl: getTextValue("facebookUrl", currentSettings.facebookUrl),
+    whatsappNumber: getTextValue("whatsappNumber", currentSettings.whatsappNumber),
+    whatsappMessage: getTextValue("whatsappMessage", currentSettings.whatsappMessage),
+    maintenanceTitle: getTextValue("maintenanceTitle", currentSettings.maintenanceTitle),
+    maintenanceMessage: getTextValue("maintenanceMessage", currentSettings.maintenanceMessage),
+    downloadPopupTitle: getTextValue("downloadPopupTitle", currentSettings.downloadPopupTitle),
+    downloadPopupBody: getTextValue("downloadPopupBody", currentSettings.downloadPopupBody),
+    homeBadge: getTextValue("homeBadge", currentSettings.homeBadge),
+    homeEyebrow: getTextValue("homeEyebrow", currentSettings.homeEyebrow),
+    homeTitle: getTextValue("homeTitle", currentSettings.homeTitle),
+    homeDescription: getTextValue("homeDescription", currentSettings.homeDescription),
+    featuredAlbumIds:
+      featuredAlbumIds.length > 0
+        ? featuredAlbumIds.map((value) => String(value).trim()).filter(Boolean)
+        : currentSettings.featuredAlbumIds,
+    maintenanceMode: getCheckboxValue("maintenanceMode", currentSettings.maintenanceMode),
+    showWhatsAppFloat: getCheckboxValue("showWhatsAppFloat", currentSettings.showWhatsAppFloat),
+    downloadsEnabled: getCheckboxValue("downloadsEnabled", currentSettings.downloadsEnabled),
+    favoritesEnabled: getCheckboxValue("favoritesEnabled", currentSettings.favoritesEnabled),
+    downloadPopupEnabled: getCheckboxValue("downloadPopupEnabled", currentSettings.downloadPopupEnabled)
   });
 
   if (!parsedInput.success) {

@@ -142,6 +142,27 @@ body {
   background-color: rgb(39 49 72 / 1) !important;
 }
 
+.dark .polaroid-paper {
+  background: #ffffff !important;
+  border-color: rgba(15, 23, 42, 0.1) !important;
+}
+
+.dark .polaroid-paper .text-slate-900,
+.dark .polaroid-paper .text-slate-700,
+.dark .polaroid-paper .text-slate-500,
+.dark .polaroid-paper .text-slate-400 {
+  color: inherit !important;
+}
+
+.dark .polaroid-paper {
+  color: #0f172a !important;
+}
+
+.dark .polaroid-paper .border-slate-300,
+.dark .polaroid-paper .border-slate-200 {
+  border-color: rgba(15, 23, 42, 0.12) !important;
+}
+
 ::selection {
   background: rgba(110, 211, 44, 0.22);
 }

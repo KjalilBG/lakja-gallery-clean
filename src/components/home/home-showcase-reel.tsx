@@ -203,7 +203,7 @@ export function HomeShowcaseReel({ photos }: HomeShowcaseReelProps) {
           <Link
             key={card.key}
             href={`/g/${card.photo.slug}`}
-            className={`group absolute block rounded-[8px] bg-white p-3 transition-[left,top,transform,opacity,filter,box-shadow] duration-[1100ms] ease-[cubic-bezier(0.22,1,0.36,1)] hover:-translate-y-1 ${getCardClass(card.slot)}`}
+            className={`polaroid-paper group absolute block rounded-[8px] bg-white p-3 transition-[left,top,transform,opacity,filter,box-shadow] duration-[1100ms] ease-[cubic-bezier(0.22,1,0.36,1)] hover:-translate-y-1 ${getCardClass(card.slot)}`}
             style={{
               ...slotStyle,
               animation:
