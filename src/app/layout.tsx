@@ -5,6 +5,7 @@ import { SpeedInsights } from "@vercel/speed-insights/next";
 import "@/app/globals.css";
 import { IntroSplash } from "@/components/ui/intro-splash";
 import { SiteHeader } from "@/components/ui/site-header";
+import { ThemeProvider } from "@/components/ui/theme-provider";
 import { WhatsAppFloat } from "@/components/ui/whatsapp-float";
 import { siteConfig } from "@/lib/config/site";
 import { getSiteSettings, resolveSiteShareImageUrl } from "@/lib/site-settings";
@@ -45,17 +46,19 @@ export default async function RootLayout({ children }: Readonly<{ children: Reac
   return (
     <html lang="es" suppressHydrationWarning>
       <body>
-        <IntroSplash />
-        <div className="relative mx-auto min-h-screen max-w-[1380px] px-3 py-3 sm:px-5 sm:py-5 lg:px-8">
-          <div className="pointer-events-none absolute inset-x-0 top-0 -z-10 mx-auto h-[360px] max-w-5xl rounded-[90px] bg-[radial-gradient(circle_at_center,rgba(130,198,69,0.08),rgba(255,255,255,0)_70%)] blur-2xl" />
-          <SiteHeader />
-          <main className="py-5 md:py-8">{children}</main>
-          {settings.showWhatsAppFloat ? (
-            <WhatsAppFloat whatsappNumber={settings.whatsappNumber} defaultMessage={settings.whatsappMessage} />
-          ) : null}
-        </div>
-        <Analytics />
-        <SpeedInsights />
+        <ThemeProvider>
+          <IntroSplash />
+          <div className="relative mx-auto min-h-screen max-w-[1380px] px-3 py-3 sm:px-5 sm:py-5 lg:px-8">
+            <div className="pointer-events-none absolute inset-x-0 top-0 -z-10 mx-auto h-[360px] max-w-5xl rounded-[90px] bg-[radial-gradient(circle_at_center,rgba(130,198,69,0.08),rgba(255,255,255,0)_70%)] blur-2xl dark:bg-[radial-gradient(circle_at_center,rgba(130,198,69,0.1),rgba(15,23,42,0)_70%)]" />
+            <SiteHeader />
+            <main className="py-5 md:py-8">{children}</main>
+            {settings.showWhatsAppFloat ? (
+              <WhatsAppFloat whatsappNumber={settings.whatsappNumber} defaultMessage={settings.whatsappMessage} />
+            ) : null}
+          </div>
+          <Analytics />
+          <SpeedInsights />
+        </ThemeProvider>
       </body>
     </html>
   );

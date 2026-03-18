@@ -5,6 +5,7 @@ import { ChevronLeft, ChevronRight, Download, Facebook, Heart, Images, Instagram
 
 import type { GalleryPhoto } from "@/features/albums/types";
 
+import { CopyPublicLinkButton } from "@/components/admin/copy-public-link-button";
 import { PhotoGrid } from "@/components/gallery/photo-grid";
 import { Button } from "@/components/ui/button";
 
@@ -403,7 +404,8 @@ export function GalleryExperience({
           </div>
         </div>
         {favoritesEnabled ? (
-        <div className="mt-3 flex justify-end">
+        <div className="mt-3 flex flex-wrap justify-end gap-2 md:gap-3">
+          <CopyPublicLinkButton slug={slug} />
           <Button
             type="button"
             variant="secondary"

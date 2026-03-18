@@ -13,7 +13,15 @@ export function LogoMark({ className = "h-[72px] w-[72px]" }: LogoMarkProps) {
         alt="La Kja"
         fill
         sizes="(max-width: 768px) 64px, 96px"
-        className="object-contain drop-shadow-[0_14px_26px_rgba(101,163,13,0.22)]"
+        className="object-contain drop-shadow-[0_14px_26px_rgba(101,163,13,0.22)] dark:hidden"
+        priority
+      />
+      <Image
+        src="/branding/Logos La Kja  Blanco.svg"
+        alt="La Kja"
+        fill
+        sizes="(max-width: 768px) 64px, 96px"
+        className="hidden object-contain drop-shadow-[0_14px_26px_rgba(15,23,42,0.28)] dark:block"
         priority
       />
     </span>

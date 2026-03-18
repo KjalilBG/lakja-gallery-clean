@@ -20,7 +20,12 @@ export function CopyPublicLinkButton({ slug }: CopyPublicLinkButtonProps) {
   }
 
   return (
-    <Button type="button" variant="secondary" className="w-full justify-center" onClick={handleCopy}>
+    <Button
+      type="button"
+      variant="secondary"
+      className="px-4 py-3 text-[11px] tracking-[0.12em] md:text-sm md:tracking-[0.16em]"
+      onClick={handleCopy}
+    >
       {copied ? <Check className="mr-2 size-4 text-lime-600" /> : <Copy className="mr-2 size-4" />}
       {copied ? "Enlace copiado" : "Copiar enlace"}
     </Button>

@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 
 import { Logo } from "@/components/ui/logo";
+import { ThemeToggle } from "@/components/ui/theme-toggle";
 import { siteConfig } from "@/lib/config/site";
 
 export function SiteHeader() {
@@ -19,7 +20,9 @@ export function SiteHeader() {
       }
     >
       <Logo />
-      <nav className="flex flex-wrap items-center gap-2 text-sm font-semibold text-slate-500 md:gap-3">
+      <div className="flex flex-wrap items-center gap-2 text-sm font-semibold text-slate-500 md:gap-3">
+        <ThemeToggle />
+        <nav className="flex flex-wrap items-center gap-2 text-sm font-semibold text-slate-500 md:gap-3">
         {siteConfig.nav.map((item) => (
           <Link
             key={item.href}
@@ -33,7 +36,8 @@ export function SiteHeader() {
             {item.label}
           </Link>
         ))}
-      </nav>
+        </nav>
+      </div>
     </header>
   );
 }

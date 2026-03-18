@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import { cookies } from "next/headers";
 import { notFound } from "next/navigation";
 
@@ -6,6 +7,7 @@ import { GalleryExperience } from "@/components/gallery/gallery-experience";
 import { galleryPhotos } from "@/features/albums/mock-data";
 import { SiteMaintenanceState } from "@/components/site/site-maintenance-state";
 import { getAlbumAccessCookieName, verifyAlbumAccessToken } from "@/lib/album-access";
+import { siteConfig } from "@/lib/config/site";
 import { getObjectPositionFromFocus } from "@/lib/cover";
 import { buildGalleryPhotosFromAlbum, getAlbumBySlug } from "@/lib/albums";
 import { formatDate } from "@/lib/format";
@@ -19,6 +21,53 @@ type GalleryPageProps = {
 };
 
 type SearchParams = Promise<Record<string, string | string[] | undefined>>;
+
+function resolveAbsoluteImageUrl(input: string | null | undefined) {
+  const baseUrl = (process.env.NEXT_PUBLIC_APP_URL ?? process.env.NEXTAUTH_URL ?? "https://lakja.top").replace(/\/$/, "");
+
+  if (!input) {
+    return `${baseUrl}${siteConfig.shareImageUrl}`;
+  }
+
+  return /^https?:\/\//i.test(input) ? input : `${baseUrl}${input.startsWith("/") ? input : `/${input}`}`;
+}
+
+export async function generateMetadata({ params }: GalleryPageProps): Promise<Metadata> {
+  const { slug } = await params;
+  const [album, siteSettings] = await Promise.all([getAlbumBySlug(slug), getSiteSettings()]);
+
+  const title = album?.title ? `${album.title} | La Kja` : siteSettings.shareTitle;
+  const description =
+    album?.description?.trim() ||
+    (album ? `${album.clientName} · Galeria fotografica en La Kja.` : siteSettings.shareDescription);
+  const imageUrl = resolveAbsoluteImageUrl(
+    album?.coverPhoto ? toMediaRoute(album.coverPhoto.previewKey ?? album.coverPhoto.originalKey) : siteSettings.shareImageUrl
+  );
+  const canonicalUrl = `${(process.env.NEXT_PUBLIC_APP_URL ?? process.env.NEXTAUTH_URL ?? "https://lakja.top").replace(/\/$/, "")}/g/${slug}`;
+
+  return {
+    title,
+    description,
+    openGraph: {
+      type: "website",
+      url: canonicalUrl,
+      title,
+      description,
+      images: [
+        {
+          url: imageUrl,
+          alt: title
+        }
+      ]
+    },
+    twitter: {
+      card: "summary_large_image",
+      title,
+      description,
+      images: [imageUrl]
+    }
+  };
+}
 
 export default async function GalleryPage({ params, searchParams }: GalleryPageProps & { searchParams: SearchParams }) {
   const { slug } = await params;

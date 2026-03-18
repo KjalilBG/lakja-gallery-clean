@@ -82,6 +82,10 @@
   color-scheme: light;
 }
 
+.dark {
+  color-scheme: dark;
+}
+
 html {
   scroll-behavior: smooth;
 }
@@ -92,8 +96,50 @@ body {
   color: #0f172a;
 }
 
+.dark body {
+  background: #0b1120;
+  color: #e5ecf4;
+}
+
 * {
   border-color: rgba(15, 23, 42, 0.08);
+}
+
+.dark * {
+  border-color: rgba(148, 163, 184, 0.18);
+}
+
+.dark .bg-white {
+  background-color: rgb(17 24 39 / 0.96) !important;
+}
+
+.dark .bg-slate-50 {
+  background-color: rgb(23 31 49 / 0.88) !important;
+}
+
+.dark .bg-slate-100 {
+  background-color: rgb(33 43 64 / 1) !important;
+}
+
+.dark .border-slate-200,
+.dark .border-slate-300 {
+  border-color: rgb(71 85 105 / 0.72) !important;
+}
+
+.dark .text-slate-900,
+.dark .text-slate-950 {
+  color: rgb(248 250 252 / 1) !important;
+}
+
+.dark .text-slate-700,
+.dark .text-slate-600,
+.dark .text-slate-500,
+.dark .text-slate-400 {
+  color: rgb(191 206 224 / 1) !important;
+}
+
+.dark .hover\:bg-slate-100:hover {
+  background-color: rgb(39 49 72 / 1) !important;
 }
 
 ::selection {
