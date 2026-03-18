@@ -6,6 +6,7 @@ import { useMemo, useRef, useState } from "react";
 type SiteShareImageFieldProps = {
   initialValue: string;
   initialPreviewUrl: string;
+  onValueChange?: (value: string, previewUrl: string) => void;
 };
 
 function resolvePreviewUrl(value: string, fallbackUrl: string) {
@@ -22,7 +23,7 @@ function resolvePreviewUrl(value: string, fallbackUrl: string) {
   return fallbackUrl;
 }
 
-export function SiteShareImageField({ initialValue, initialPreviewUrl }: SiteShareImageFieldProps) {
+export function SiteShareImageField({ initialValue, initialPreviewUrl, onValueChange }: SiteShareImageFieldProps) {
   const [value, setValue] = useState(initialValue);
   const [previewUrl, setPreviewUrl] = useState(resolvePreviewUrl(initialValue, initialPreviewUrl));
   const [isUploading, setIsUploading] = useState(false);
@@ -57,6 +58,7 @@ export function SiteShareImageField({ initialValue, initialPreviewUrl }: SiteSha
 
       setValue(payload.shareImageUrl);
       setPreviewUrl(payload.shareImageUrl);
+      onValueChange?.(payload.shareImageUrl, resolvePreviewUrl(payload.shareImageUrl, initialPreviewUrl));
       setFeedback("Imagen social actualizada.");
       setError(null);
     } catch (uploadError) {
@@ -70,7 +72,9 @@ export function SiteShareImageField({ initialValue, initialPreviewUrl }: SiteSha
 
   function handleManualChange(nextValue: string) {
     setValue(nextValue);
-    setPreviewUrl(resolvePreviewUrl(nextValue, initialPreviewUrl));
+    const nextPreviewUrl = resolvePreviewUrl(nextValue, initialPreviewUrl);
+    setPreviewUrl(nextPreviewUrl);
+    onValueChange?.(nextValue, nextPreviewUrl);
     setFeedback(null);
     setError(null);
   }
@@ -78,6 +82,7 @@ export function SiteShareImageField({ initialValue, initialPreviewUrl }: SiteSha
   function handleClear() {
     setValue("");
     setPreviewUrl(initialPreviewUrl);
+    onValueChange?.("", initialPreviewUrl);
     setFeedback("Se usara la imagen social por defecto del sitio.");
     setError(null);
   }
@@ -117,6 +122,9 @@ export function SiteShareImageField({ initialValue, initialPreviewUrl }: SiteSha
 
           <p className="text-sm leading-6 text-slate-500 dark:text-slate-300">
             Puedes subir la imagen desde aqui o pegar manualmente una URL absoluta o ruta local del proyecto.
+          </p>
+          <p className="rounded-[18px] border border-sky-200 bg-sky-50 px-3 py-2 text-sm font-semibold text-sky-700 dark:border-sky-500/30 dark:bg-sky-500/12 dark:text-sky-300">
+            Recomendacion: usa una imagen horizontal de 1200 x 630 px. Si quieres un poco mas de margen, 1600 x 840 px funciona excelente.
           </p>
 
           {feedback ? (
