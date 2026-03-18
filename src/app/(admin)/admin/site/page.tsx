@@ -1,5 +1,6 @@
 import { CheckCircle2, Globe2, ShieldCheck, Wrench } from "lucide-react";
 
+import { SiteShareImageField } from "@/components/admin/site-share-image-field";
 import { getAdminAlbums } from "@/lib/albums";
 import { requireSuperAdminSession } from "@/lib/auth-guard";
 import { getSiteSettings, resolveSiteShareImageUrl } from "@/lib/site-settings";
@@ -253,7 +254,7 @@ export default async function SiteSettingsPage({ searchParams }: SiteSettingsPag
                   </div>
                   <div className="space-y-2">
                     <FieldLabel>Imagen al compartir</FieldLabel>
-                    <input name="shareImageUrl" defaultValue={settings.shareImageUrl ?? ""} placeholder="https://... o /branding/lakja-logo.svg" className="w-full rounded-[22px] border border-slate-200 bg-slate-50 px-5 py-4 text-base font-medium text-slate-700 outline-none transition focus:border-lime-300 focus:bg-white focus:ring-4 focus:ring-lime-100" />
+                    <SiteShareImageField initialValue={settings.shareImageUrl ?? ""} initialPreviewUrl={previewImageUrl} />
                   </div>
                 </div>
               </SectionCard>

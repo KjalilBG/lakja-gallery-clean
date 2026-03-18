@@ -23,6 +23,20 @@ export async function ensureAdminApiRequest() {
   return null;
 }
 
+export async function ensureSuperAdminApiRequest() {
+  const session = await getServerAuthSession();
+
+  if (!session?.user) {
+    return NextResponse.json({ ok: false, error: "No autenticado." }, { status: 401 });
+  }
+
+  if (!isSuperAdminEmail(session.user.email)) {
+    return NextResponse.json({ ok: false, error: "Sin permisos de super admin." }, { status: 403 });
+  }
+
+  return null;
+}
+
 export async function requireSuperAdminSession(callbackUrl = "/admin") {
   const session = await requireAdminSession(callbackUrl);
 
