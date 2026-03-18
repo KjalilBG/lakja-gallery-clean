@@ -113,6 +113,8 @@ export default async function SiteSettingsPage({ searchParams }: SiteSettingsPag
     settings.favoritesEnabled,
     settings.downloadPopupEnabled
   ].filter(Boolean).length;
+  const formLayoutClass =
+    activeTab === "brand" ? "grid gap-6 xl:grid-cols-1" : "grid gap-6 xl:grid-cols-[minmax(0,1fr)_380px]";
 
   return (
     <div className="space-y-6">
@@ -144,7 +146,7 @@ export default async function SiteSettingsPage({ searchParams }: SiteSettingsPag
         <div className="rounded-[26px] border border-rose-200 bg-rose-50 px-5 py-4 text-sm font-semibold text-rose-700 dark:border-rose-500/30 dark:bg-rose-500/12 dark:text-rose-200">{errorMessage}</div>
       ) : null}
 
-      <form action={saveSiteSettingsAction} className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_380px]">
+      <form action={saveSiteSettingsAction} className={formLayoutClass}>
         <div className="space-y-6">
           <section className="rounded-[30px] border border-slate-200 bg-white px-4 py-4 shadow-[0_14px_35px_rgba(15,23,42,0.05)] dark:border-slate-700 dark:bg-slate-900">
             <div className="flex flex-wrap gap-2">
@@ -346,7 +348,8 @@ export default async function SiteSettingsPage({ searchParams }: SiteSettingsPag
           </section>
         </div>
 
-        <aside className="space-y-6 xl:sticky xl:top-28 xl:self-start">
+        {activeTab !== "brand" ? (
+          <aside className="space-y-6 xl:sticky xl:top-28 xl:self-start">
           <section className="rounded-[30px] border border-slate-200 bg-white p-6 shadow-[0_14px_35px_rgba(15,23,42,0.05)] dark:border-slate-700 dark:bg-slate-900">
             <p className="text-xs font-extrabold uppercase tracking-[0.24em] text-slate-400 dark:text-slate-500">Tab activa</p>
             <div className="mt-4 rounded-[22px] border border-slate-100 bg-slate-50 px-4 py-4 dark:border-slate-800 dark:bg-slate-800/70">
@@ -374,7 +377,8 @@ export default async function SiteSettingsPage({ searchParams }: SiteSettingsPag
               </div>
             </div>
           </section>
-        </aside>
+          </aside>
+        ) : null}
       </form>
     </div>
   );
