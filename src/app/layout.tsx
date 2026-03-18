@@ -8,14 +8,14 @@ import { SiteHeader } from "@/components/ui/site-header";
 import { ThemeProvider } from "@/components/ui/theme-provider";
 import { WhatsAppFloat } from "@/components/ui/whatsapp-float";
 import { siteConfig } from "@/lib/config/site";
-import { getSiteSettings, resolveSiteShareImageUrl } from "@/lib/site-settings";
+import { getSiteSettings, resolveAppUrl, resolveSiteShareImageUrl } from "@/lib/site-settings";
 
 export async function generateMetadata(): Promise<Metadata> {
   const settings = await getSiteSettings();
   const shareImageUrl = resolveSiteShareImageUrl(settings.shareImageUrl);
 
   return {
-    metadataBase: new URL(process.env.NEXT_PUBLIC_APP_URL ?? process.env.NEXTAUTH_URL ?? siteConfig.url),
+    metadataBase: new URL(resolveAppUrl()),
     title: settings.shareTitle,
     description: settings.shareDescription,
     openGraph: {
@@ -27,6 +27,8 @@ export async function generateMetadata(): Promise<Metadata> {
       images: [
         {
           url: shareImageUrl,
+          width: 1200,
+          height: 630,
           alt: settings.shareTitle
         }
       ]

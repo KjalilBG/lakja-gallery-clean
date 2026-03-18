@@ -34,8 +34,11 @@ function normalizeRequiredText(value: string | null | undefined, fallbackValue: 
   return value?.trim() || fallbackValue;
 }
 
-function resolveAppUrl() {
-  const rawUrl = process.env.NEXT_PUBLIC_APP_URL ?? process.env.NEXTAUTH_URL ?? siteConfig.url;
+export function resolveAppUrl() {
+  const rawUrl =
+    process.env.NODE_ENV === "development"
+      ? process.env.NEXT_PUBLIC_APP_URL ?? process.env.NEXTAUTH_URL ?? siteConfig.url
+      : siteConfig.url;
   return rawUrl.replace(/\/$/, "");
 }
 

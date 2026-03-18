@@ -12,7 +12,7 @@ import { getObjectPositionFromFocus } from "@/lib/cover";
 import { buildGalleryPhotosFromAlbum, getAlbumBySlug } from "@/lib/albums";
 import { formatDate } from "@/lib/format";
 import { toMediaRoute } from "@/lib/r2";
-import { getSiteSettings } from "@/lib/site-settings";
+import { getSiteSettings, resolveAppUrl } from "@/lib/site-settings";
 
 export const dynamic = "force-dynamic";
 
@@ -23,7 +23,7 @@ type GalleryPageProps = {
 type SearchParams = Promise<Record<string, string | string[] | undefined>>;
 
 function resolveAbsoluteImageUrl(input: string | null | undefined) {
-  const baseUrl = (process.env.NEXT_PUBLIC_APP_URL ?? process.env.NEXTAUTH_URL ?? "https://lakja.top").replace(/\/$/, "");
+  const baseUrl = resolveAppUrl();
 
   if (!input) {
     return `${baseUrl}${siteConfig.shareImageUrl}`;
@@ -43,7 +43,7 @@ export async function generateMetadata({ params }: GalleryPageProps): Promise<Me
   const imageUrl = resolveAbsoluteImageUrl(
     album?.coverPhoto ? toMediaRoute(album.coverPhoto.previewKey ?? album.coverPhoto.originalKey) : siteSettings.shareImageUrl
   );
-  const canonicalUrl = `${(process.env.NEXT_PUBLIC_APP_URL ?? process.env.NEXTAUTH_URL ?? "https://lakja.top").replace(/\/$/, "")}/g/${slug}`;
+  const canonicalUrl = `${resolveAppUrl()}/g/${slug}`;
 
   return {
     title,
@@ -56,6 +56,8 @@ export async function generateMetadata({ params }: GalleryPageProps): Promise<Me
       images: [
         {
           url: imageUrl,
+          width: 1200,
+          height: 630,
           alt: title
         }
       ]
