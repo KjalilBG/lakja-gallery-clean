@@ -1,6 +1,6 @@
 "use server";
 
-import { AlbumStatus, AlbumVisibility, CoverPosition } from "@prisma/client";
+import { AlbumStatus, AlbumVisibility, CoverPosition, FavoriteSelectionStatus } from "@prisma/client";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
@@ -16,6 +16,7 @@ import {
   processSinglePhotoBibRecognition,
   saveAlbumPhotos,
   setAlbumCoverPhoto,
+  updateFavoriteSelectionStatus,
   updatePhotoBibsManually,
   updateAlbum
 } from "@/lib/albums";
@@ -236,6 +237,20 @@ export async function deleteFavoriteSelectionAction(formData: FormData) {
   const selectionId = z.string().cuid().parse(formData.get("selectionId"));
 
   await deleteFavoriteSelection(selectionId, albumId);
+
+  revalidatePath(`/admin/albums/${albumId}`);
+  revalidatePath("/admin/albums");
+  revalidatePath("/admin");
+  redirect(`/admin/albums/${albumId}?saved=1`);
+}
+
+export async function updateFavoriteSelectionStatusAction(formData: FormData) {
+  await requireAdminSession("/admin/albums");
+  const albumId = z.string().cuid().parse(formData.get("albumId"));
+  const selectionId = z.string().cuid().parse(formData.get("selectionId"));
+  const status = z.nativeEnum(FavoriteSelectionStatus).parse(formData.get("status"));
+
+  await updateFavoriteSelectionStatus(selectionId, albumId, status);
 
   revalidatePath(`/admin/albums/${albumId}`);
   revalidatePath("/admin/albums");

@@ -80,6 +80,7 @@ export type FavoriteSelectionSummary = {
   clientName: string;
   message: string | null;
   whatsapp: string | null;
+  status: "pending" | "editing" | "delivered";
   createdAt: string;
   photoCount: number;
   serials: number[];

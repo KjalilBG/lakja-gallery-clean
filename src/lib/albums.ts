@@ -1,4 +1,4 @@
-import { AlbumStatus, AlbumVisibility, CoverPosition, JobStatus, JobType } from "@prisma/client";
+import { AlbumStatus, AlbumVisibility, CoverPosition, FavoriteSelectionStatus, JobStatus, JobType } from "@prisma/client";
 import path from "node:path";
 import { mkdir, rm, unlink, writeFile } from "node:fs/promises";
 
@@ -35,6 +35,14 @@ function mapVisibility(visibility: AlbumVisibility): AlbumDetail["visibility"] {
 
 function mapCoverPosition(coverPosition: CoverPosition): AlbumDetail["coverPosition"] {
   return coverPosition === CoverPosition.TOP ? "top" : coverPosition === CoverPosition.BOTTOM ? "bottom" : "center";
+}
+
+function mapFavoriteSelectionStatus(status: FavoriteSelectionStatus): "pending" | "editing" | "delivered" {
+  return status === FavoriteSelectionStatus.EDITING
+    ? "editing"
+    : status === FavoriteSelectionStatus.DELIVERED
+      ? "delivered"
+      : "pending";
 }
 
 function defaultCoverUrl() {
@@ -431,11 +439,24 @@ export async function getPublishedShowcasePhotos(limit = 10) {
 }
 
 export async function getAdminStats() {
-  const [totalAlbums, publishedAlbums, totalFavorites, totalViews] = await Promise.all([
+  const [
+    totalAlbums,
+    publishedAlbums,
+    totalFavorites,
+    totalViews,
+    totalDownloads,
+    pendingSelections,
+    editingSelections,
+    deliveredSelections
+  ] = await prisma.$transaction([
     prisma.album.count(),
     prisma.album.count({ where: { status: AlbumStatus.PUBLISHED } }),
     prisma.favoriteSelectionItem.count(),
-    prisma.albumView.count()
+    prisma.albumView.count(),
+    prisma.download.count(),
+    prisma.favoriteSelection.count({ where: { status: FavoriteSelectionStatus.PENDING } }),
+    prisma.favoriteSelection.count({ where: { status: FavoriteSelectionStatus.EDITING } }),
+    prisma.favoriteSelection.count({ where: { status: FavoriteSelectionStatus.DELIVERED } })
   ]);
 
   return {
@@ -443,7 +464,74 @@ export async function getAdminStats() {
     publishedAlbums,
     draftAlbums: Math.max(totalAlbums - publishedAlbums, 0),
     totalFavorites,
-    totalViews
+    totalViews,
+    totalDownloads,
+    pendingSelections,
+    editingSelections,
+    deliveredSelections
+  };
+}
+
+export async function getAdminNavStats() {
+  const [totalAlbums, publishedAlbums, pendingSelections] = await prisma.$transaction([
+    prisma.album.count(),
+    prisma.album.count({ where: { status: AlbumStatus.PUBLISHED } }),
+    prisma.favoriteSelection.count({ where: { status: FavoriteSelectionStatus.PENDING } })
+  ]);
+
+  return {
+    draftAlbums: Math.max(totalAlbums - publishedAlbums, 0),
+    pendingSelections
+  };
+}
+
+export async function getAdminDashboardData() {
+  const [stats, albums, recentSelections] = await Promise.all([
+    getAdminStats(),
+    getAdminAlbums(),
+    prisma.favoriteSelection.findMany({
+      orderBy: { createdAt: "desc" },
+      take: 6,
+      select: {
+        id: true,
+        clientName: true,
+        createdAt: true,
+        status: true,
+        album: {
+          select: {
+            id: true,
+            title: true,
+            slug: true
+          }
+        },
+        _count: {
+          select: {
+            items: true
+          }
+        }
+      }
+    })
+  ]);
+
+  const topViewedAlbums = [...albums].sort((left, right) => right.views - left.views).slice(0, 3);
+  const topFavoriteAlbums = [...albums].sort((left, right) => right.favorites - left.favorites).slice(0, 3);
+  const recentAlbums = albums.slice(0, 5);
+
+  return {
+    stats,
+    recentAlbums,
+    topViewedAlbums,
+    topFavoriteAlbums,
+    recentSelections: recentSelections.map((selection) => ({
+      id: selection.id,
+      clientName: selection.clientName,
+      albumId: selection.album.id,
+      albumTitle: selection.album.title,
+      albumSlug: selection.album.slug,
+      createdAt: selection.createdAt.toISOString(),
+      photoCount: selection._count.items,
+      status: mapFavoriteSelectionStatus(selection.status)
+    }))
   };
 }
 
@@ -467,6 +555,11 @@ export async function getAdminAlbumById(id: string): Promise<AlbumDetail | null>
         orderBy: { createdAt: "desc" },
         take: 8,
         include: {
+          _count: {
+            select: {
+              items: true
+            }
+          },
           items: {
             orderBy: { sortOrder: "asc" },
               include: {
@@ -523,7 +616,7 @@ export async function getAdminAlbumById(id: string): Promise<AlbumDetail | null>
     views: album._count.views,
     downloads: album._count.downloads,
     favoriteSelectionsCount: album._count.favoriteSelections,
-    favoritePhotosCount: album.favoriteSelections.reduce((count, selection) => count + selection.items.length, 0),
+    favoritePhotosCount: album.favoriteSelections.reduce((count, selection) => count + selection._count.items, 0),
     bibRecognitionEnabled: album.bibRecognitionEnabled,
     bibRecognitionProcessedAt: album.bibRecognitionProcessedAt ? album.bibRecognitionProcessedAt.toISOString() : null,
     bibRecognizedPhotosCount: album.photos.filter((photo) => photo.detectedBibs.length > 0).length,
@@ -560,6 +653,7 @@ export async function getAdminAlbumById(id: string): Promise<AlbumDetail | null>
       clientName: selection.clientName,
       message: selection.message,
       whatsapp: selection.whatsapp,
+      status: mapFavoriteSelectionStatus(selection.status),
       createdAt: selection.createdAt.toISOString(),
       photoCount: selection.items.length,
       serials: selection.items.map((item) => item.photo.sortOrder + 1),
@@ -661,6 +755,7 @@ export async function saveFavoriteSelection(input: {
       clientName: input.clientName,
       message: input.message?.trim() || null,
       whatsapp: input.whatsapp?.trim() || null,
+      status: FavoriteSelectionStatus.PENDING,
       items: {
         create: album.photos.map((photo, index) => ({
           photoId: photo.id,
@@ -807,6 +902,22 @@ export async function deleteFavoriteSelection(selectionId: string, albumId: stri
 
   await prisma.favoriteSelection.delete({
     where: { id: selectionId }
+  });
+}
+
+export async function updateFavoriteSelectionStatus(
+  selectionId: string,
+  albumId: string,
+  status: FavoriteSelectionStatus
+) {
+  return prisma.favoriteSelection.updateMany({
+    where: {
+      id: selectionId,
+      albumId
+    },
+    data: {
+      status
+    }
   });
 }
 

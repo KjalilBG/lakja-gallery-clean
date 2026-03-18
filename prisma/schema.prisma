@@ -42,6 +42,12 @@ enum DownloadType {
   FULL_ZIP
 }
 
+enum FavoriteSelectionStatus {
+  PENDING
+  EDITING
+  DELIVERED
+}
+
 enum JobType {
   GENERATE_PREVIEW
   GENERATE_ZIP
@@ -176,6 +182,7 @@ model FavoriteSelection {
   clientName   String
   message      String?
   whatsapp     String?
+  status       FavoriteSelectionStatus @default(PENDING)
   createdAt    DateTime                @default(now())
   updatedAt    DateTime                @updatedAt
   album        Album                   @relation(fields: [albumId], references: [id], onDelete: Cascade)
