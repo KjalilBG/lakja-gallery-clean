@@ -1,11 +1,12 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { AlbumStatus, AlbumVisibility } from "@prisma/client";
-import { ArrowLeft, Download, ExternalLink, Eye, FileText, Heart, Settings2, Trash2, UploadCloud } from "lucide-react";
+import { ArrowLeft, Download, ExternalLink, Eye, FileSearch, FileText, Heart, Settings2, Trash2, UploadCloud } from "lucide-react";
 
 import { AlbumPhotoWorkspace } from "@/components/admin/album-photo-workspace";
 import { AlbumPhotoUploader } from "@/components/admin/album-photo-uploader";
 import { AlbumSettingsFields } from "@/components/admin/album-settings-fields";
+import { AlbumBibOcrPanel } from "@/components/admin/album-bib-ocr-panel";
 import { ConfirmDeleteAlbumButton } from "@/components/admin/confirm-delete-album-button";
 import { CopyAlbumLinkButton } from "@/components/admin/copy-album-link-button";
 import { SubmitButton } from "@/components/forms/submit-button";
@@ -17,6 +18,7 @@ import { formatDate } from "@/lib/format";
 import { deleteAlbumAction, deleteFavoriteSelectionAction, updateAlbumAction } from "../actions";
 
 export const dynamic = "force-dynamic";
+export const maxDuration = 300;
 
 type AlbumDetailPageProps = {
   params: Promise<{ id: string }>;
@@ -59,6 +61,11 @@ export default async function AlbumDetailPage({ params, searchParams }: AlbumDet
       {resolvedSearchParams.photoDeleted === "1" ? (
         <div className="rounded-[24px] border border-amber-200 bg-amber-50 px-5 py-4 text-sm font-bold text-amber-800">
           La foto fue eliminada del album.
+        </div>
+      ) : null}
+      {resolvedSearchParams.ocrError ? (
+        <div className="rounded-[24px] border border-rose-200 bg-rose-50 px-5 py-4 text-sm font-bold text-rose-800">
+          {String(resolvedSearchParams.ocrError)}
         </div>
       ) : null}
 
@@ -275,12 +282,39 @@ export default async function AlbumDetailPage({ params, searchParams }: AlbumDet
                 </div>
               </div>
             </label>
+            <label className="rounded-[22px] border border-slate-200 bg-slate-50 p-4 md:col-span-3">
+              <div className="flex items-start gap-3">
+                <input
+                  type="checkbox"
+                  name="bibRecognitionEnabled"
+                  defaultChecked={album.bibRecognitionEnabled}
+                  className="mt-1 h-5 w-5 rounded border-slate-300 text-lime-500 focus:ring-lime-400"
+                />
+                <div>
+                  <p className="font-bold text-slate-900">Reconocimiento de bibs</p>
+                  <p className="mt-1 text-sm text-slate-500">
+                    Activa OCR para este album deportivo y permite buscar fotos por numero de bib en la galeria publica.
+                  </p>
+                </div>
+              </div>
+            </label>
           </div>
 
           <SubmitButton idleLabel="Guardar cambios" pendingLabel="Guardando..." />
         </form>
 
         <aside className="space-y-4">
+          {album.bibRecognitionEnabled ? (
+            <AlbumBibOcrPanel
+              albumId={album.id}
+              enabled={album.bibRecognitionEnabled}
+              photoCount={album.photoCount}
+              recognizedCount={album.bibRecognizedPhotosCount}
+              processedAt={album.bibRecognitionProcessedAt ? formatDate(album.bibRecognitionProcessedAt) : null}
+              job={album.bibJob}
+            />
+          ) : null}
+
           <div className="rounded-[30px] border border-rose-200 bg-white p-6 shadow-[0_12px_30px_rgba(15,23,42,0.05)]">
             <div className="flex items-center gap-3">
               <Trash2 className="size-5 text-rose-500" />
@@ -395,7 +429,12 @@ export default async function AlbumDetailPage({ params, searchParams }: AlbumDet
         </div>
 
         {album.photos.length > 0 ? (
-          <AlbumPhotoWorkspace albumId={album.id} slug={album.slug} photos={album.photos} />
+          <AlbumPhotoWorkspace
+            albumId={album.id}
+            slug={album.slug}
+            photos={album.photos}
+            bibRecognitionEnabled={album.bibRecognitionEnabled}
+          />
         ) : (
           <div className="rounded-[28px] border border-dashed border-slate-300 bg-slate-50 px-6 py-14 text-center text-slate-500">
             Aun no has subido fotos a este album. Usa el bloque superior para cargar las primeras imagenes.

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { ChevronLeft, ChevronRight, Download, Facebook, Heart, Images, Instagram, LoaderCircle, MessageCircle, Send, X } from "lucide-react";
+import { ChevronLeft, ChevronRight, Download, Facebook, Heart, Images, Instagram, LoaderCircle, MessageCircle, Search, Send, X } from "lucide-react";
 
 import type { GalleryPhoto } from "@/features/albums/types";
 
@@ -24,6 +24,7 @@ type GalleryExperienceProps = {
   favoritesEnabled: boolean;
   downloadsEnabled: boolean;
   downloadPopupEnabled: boolean;
+  bibRecognitionEnabled?: boolean;
   instagramUrl: string;
   facebookUrl: string;
   whatsappNumber: string;
@@ -42,6 +43,7 @@ export function GalleryExperience({
   favoritesEnabled,
   downloadsEnabled,
   downloadPopupEnabled,
+  bibRecognitionEnabled = false,
   instagramUrl,
   facebookUrl,
   whatsappNumber,
@@ -54,6 +56,7 @@ export function GalleryExperience({
   const [downloadIntent, setDownloadIntent] = useState<DownloadIntent | null>(null);
   const [isClosingDownloadPopup, setIsClosingDownloadPopup] = useState(false);
   const [showSendFavorites, setShowSendFavorites] = useState(false);
+  const [bibQuery, setBibQuery] = useState("");
   const [senderName, setSenderName] = useState("");
   const [senderWhatsapp, setSenderWhatsapp] = useState("");
   const [senderMessage, setSenderMessage] = useState("");
@@ -103,8 +106,18 @@ export function GalleryExperience({
   );
 
   const visiblePhotos = useMemo(
-    () => (showOnlyFavorites ? photosWithFavorites.filter((photo) => photo.isFavorite) : photosWithFavorites),
-    [photosWithFavorites, showOnlyFavorites]
+    () =>
+      photosWithFavorites.filter((photo) => {
+        const matchesFavorite = !showOnlyFavorites || photo.isFavorite;
+        const normalizedQuery = bibQuery.trim();
+        const matchesBib =
+          normalizedQuery.length === 0 ||
+          !bibRecognitionEnabled ||
+          (photo.detectedBibs ?? []).some((bib) => bib.includes(normalizedQuery));
+
+        return matchesFavorite && matchesBib;
+      }),
+    [photosWithFavorites, showOnlyFavorites, bibQuery, bibRecognitionEnabled]
   );
 
   const activePhoto = activeIndex === null ? null : visiblePhotos[activeIndex];
@@ -328,7 +341,8 @@ export function GalleryExperience({
     <>
       <section className="sticky top-[78px] z-10 rounded-[22px] border border-slate-200 bg-white px-3 py-3 shadow-[0_16px_40px_rgba(15,23,42,0.08)] md:top-[92px] md:rounded-[30px] md:px-5 md:py-4">
         <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
-          <div className="-mx-1 flex snap-x snap-mandatory gap-2 overflow-x-auto px-1 pb-1 md:mx-0 md:flex-wrap md:overflow-visible md:px-0 md:pb-0 md:gap-3 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+          <div className="space-y-3">
+            <div className="-mx-1 flex snap-x snap-mandatory gap-2 overflow-x-auto px-1 pb-1 md:mx-0 md:flex-wrap md:overflow-visible md:px-0 md:pb-0 md:gap-3 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
             {favoritesEnabled ? (
               <>
                 <button
@@ -354,6 +368,18 @@ export function GalleryExperience({
             <div className="shrink-0 snap-start rounded-full border border-slate-200 px-4 py-2.5 text-xs font-bold uppercase tracking-[0.14em] text-slate-500 md:px-5 md:py-3 md:text-sm md:tracking-[0.18em]">
               {visiblePhotos.length} fotos
             </div>
+            </div>
+            {bibRecognitionEnabled ? (
+              <label className="flex max-w-sm items-center gap-3 rounded-[18px] border border-slate-200 bg-slate-50 px-4 py-3">
+                <Search className="size-4 text-slate-400" />
+                <input
+                  value={bibQuery}
+                  onChange={(event) => setBibQuery(event.target.value.replace(/\D+/g, ""))}
+                  placeholder="Buscar por numero de bib"
+                  className="w-full bg-transparent text-sm font-medium text-slate-700 outline-none placeholder:text-slate-400"
+                />
+              </label>
+            ) : null}
           </div>
 
           <div className="grid gap-2 sm:grid-cols-2 xl:min-w-[520px] xl:gap-3">

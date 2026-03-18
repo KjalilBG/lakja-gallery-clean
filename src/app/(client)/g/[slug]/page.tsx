@@ -97,6 +97,7 @@ export default async function GalleryPage({ params, searchParams }: GalleryPageP
           favoritesEnabled={siteSettings.favoritesEnabled}
           downloadsEnabled={siteSettings.downloadsEnabled}
           downloadPopupEnabled={siteSettings.downloadPopupEnabled}
+          bibRecognitionEnabled={album?.bibRecognitionEnabled ?? false}
           instagramUrl={siteSettings.instagramUrl}
           facebookUrl={siteSettings.facebookUrl}
           whatsappNumber={siteSettings.whatsappNumber}

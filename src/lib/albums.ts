@@ -1,10 +1,11 @@
-import { AlbumStatus, AlbumVisibility, CoverPosition } from "@prisma/client";
+import { AlbumStatus, AlbumVisibility, CoverPosition, JobStatus, JobType } from "@prisma/client";
 import path from "node:path";
 import { mkdir, rm, unlink, writeFile } from "node:fs/promises";
 
 import exifr from "exifr";
 
 import type { AlbumDetail, AlbumSummary, GalleryPhoto } from "@/features/albums/types";
+import { detectBibs } from "@/lib/bib-ocr";
 import { buildImageDerivatives } from "@/lib/image";
 import { prisma } from "@/lib/prisma";
 import { isR2Configured, parseStorageKey, readFromR2, removeFromR2, toMediaRoute, uploadToR2 } from "@/lib/r2";
@@ -60,6 +61,36 @@ function detectAspect(fileName: string): GalleryPhoto["aspect"] {
 
 function buildPublicPhotoTitle(albumTitle: string, sortOrder: number) {
   return `${sortOrder + 1} - ${albumTitle}`;
+}
+
+type BibJobPayload = {
+  mode: "all" | "pending";
+  batchSize: number;
+  remainingPhotoIds: string[];
+  total: number;
+  processed: number;
+  recognized: number;
+  failed: number;
+  skipped: number;
+};
+
+function isBibJobPayload(value: unknown): value is BibJobPayload {
+  if (!value || typeof value !== "object") return false;
+  const payload = value as Record<string, unknown>;
+  return (
+    (payload.mode === "all" || payload.mode === "pending") &&
+    typeof payload.batchSize === "number" &&
+    Array.isArray(payload.remainingPhotoIds) &&
+    typeof payload.total === "number" &&
+    typeof payload.processed === "number" &&
+    typeof payload.recognized === "number" &&
+    typeof payload.failed === "number" &&
+    typeof payload.skipped === "number"
+  );
+}
+
+function normalizeBibJobPayload(value: unknown): BibJobPayload | null {
+  return isBibJobPayload(value) ? value : null;
 }
 
 async function ensureUniqueSlug(base: string, excludeAlbumId?: string) {
@@ -130,6 +161,7 @@ export async function createAlbum(input: {
   allowSingleDownload: boolean;
   allowFavoritesDownload: boolean;
   allowFullDownload: boolean;
+  bibRecognitionEnabled?: boolean;
 }) {
   const slug = await ensureUniqueSlug(input.title);
 
@@ -145,12 +177,13 @@ export async function createAlbum(input: {
       coverPosition: input.coverPosition ?? CoverPosition.CENTER,
       coverFocusX: input.coverFocusX ?? 50,
       coverFocusY: input.coverFocusY ?? 50,
-      passwordHash: input.visibility === AlbumVisibility.PASSWORD ? input.passwordHash ?? null : null,
-      allowSingleDownload: input.allowSingleDownload,
-      allowFavoritesDownload: input.allowFavoritesDownload,
-      allowFullDownload: input.allowFullDownload
-    }
-  });
+        passwordHash: input.visibility === AlbumVisibility.PASSWORD ? input.passwordHash ?? null : null,
+        allowSingleDownload: input.allowSingleDownload,
+        allowFavoritesDownload: input.allowFavoritesDownload,
+        allowFullDownload: input.allowFullDownload,
+        bibRecognitionEnabled: input.bibRecognitionEnabled ?? false
+      }
+    });
 }
 
 export async function updateAlbum(
@@ -169,6 +202,7 @@ export async function updateAlbum(
     allowSingleDownload: boolean;
     allowFavoritesDownload: boolean;
     allowFullDownload: boolean;
+    bibRecognitionEnabled?: boolean;
   }
 ) {
   const slug = await ensureUniqueSlug(input.title, albumId);
@@ -184,10 +218,11 @@ export async function updateAlbum(
     coverPosition: CoverPosition;
     coverFocusX: number;
     coverFocusY: number;
-    passwordHash?: string | null;
-    allowSingleDownload: boolean;
-    allowFavoritesDownload: boolean;
-    allowFullDownload: boolean;
+      passwordHash?: string | null;
+      allowSingleDownload: boolean;
+      allowFavoritesDownload: boolean;
+      allowFullDownload: boolean;
+      bibRecognitionEnabled: boolean;
   } = {
     slug,
     title: input.title,
@@ -198,11 +233,12 @@ export async function updateAlbum(
     visibility: input.visibility,
     coverPosition: input.coverPosition ?? CoverPosition.CENTER,
     coverFocusX: input.coverFocusX ?? 50,
-    coverFocusY: input.coverFocusY ?? 50,
-    allowSingleDownload: input.allowSingleDownload,
-    allowFavoritesDownload: input.allowFavoritesDownload,
-    allowFullDownload: input.allowFullDownload
-  };
+      coverFocusY: input.coverFocusY ?? 50,
+      allowSingleDownload: input.allowSingleDownload,
+      allowFavoritesDownload: input.allowFavoritesDownload,
+      allowFullDownload: input.allowFullDownload,
+      bibRecognitionEnabled: input.bibRecognitionEnabled ?? false
+    };
 
   if (input.visibility === AlbumVisibility.PUBLIC_LINK) {
     updateData.passwordHash = null;
@@ -434,18 +470,30 @@ export async function getAdminAlbumById(id: string): Promise<AlbumDetail | null>
           items: {
             orderBy: { sortOrder: "asc" },
               include: {
-                photo: {
-                  select: {
-                    id: true,
-                    sortOrder: true,
-                    filename: true,
-                    previewKey: true,
-                    thumbKey: true,
-                    originalKey: true
+                  photo: {
+                    select: {
+                      id: true,
+                      sortOrder: true,
+                      filename: true,
+                      previewKey: true,
+                      thumbKey: true,
+                      originalKey: true
+                    }
                   }
                 }
-              }
+            }
           }
+      }
+      ,
+      jobs: {
+        where: { type: JobType.OCR_BIB },
+        orderBy: { updatedAt: "desc" },
+        take: 1,
+        select: {
+          id: true,
+          status: true,
+          payload: true,
+          updatedAt: true
         }
       }
     }
@@ -454,6 +502,9 @@ export async function getAdminAlbumById(id: string): Promise<AlbumDetail | null>
   if (!album) {
     return null;
   }
+
+  const latestBibJob = album.jobs[0];
+  const bibJobPayload = latestBibJob ? normalizeBibJobPayload(latestBibJob.payload) : null;
 
   return {
     id: album.id,
@@ -473,6 +524,32 @@ export async function getAdminAlbumById(id: string): Promise<AlbumDetail | null>
     downloads: album._count.downloads,
     favoriteSelectionsCount: album._count.favoriteSelections,
     favoritePhotosCount: album.favoriteSelections.reduce((count, selection) => count + selection.items.length, 0),
+    bibRecognitionEnabled: album.bibRecognitionEnabled,
+    bibRecognitionProcessedAt: album.bibRecognitionProcessedAt ? album.bibRecognitionProcessedAt.toISOString() : null,
+    bibRecognizedPhotosCount: album.photos.filter((photo) => photo.detectedBibs.length > 0).length,
+    bibJob:
+      latestBibJob && bibJobPayload
+        ? {
+            id: latestBibJob.id,
+            status:
+              latestBibJob.status === JobStatus.RUNNING
+                ? "running"
+                : latestBibJob.status === JobStatus.COMPLETED
+                  ? "completed"
+                  : latestBibJob.status === JobStatus.FAILED
+                    ? "failed"
+                    : "pending",
+            total: bibJobPayload.total,
+            processed: bibJobPayload.processed,
+            recognized: bibJobPayload.recognized,
+            failed: bibJobPayload.failed,
+            skipped: bibJobPayload.skipped,
+            remaining: bibJobPayload.remainingPhotoIds.length,
+            batchSize: bibJobPayload.batchSize,
+            mode: bibJobPayload.mode,
+            updatedAt: latestBibJob.updatedAt.toISOString()
+          }
+        : null,
     permissions: {
       allowSingleDownload: album.allowSingleDownload,
       allowFavoritesDownload: album.allowFavoritesDownload,
@@ -502,7 +579,10 @@ export async function getAdminAlbumById(id: string): Promise<AlbumDetail | null>
       title: photo.filename,
       aspect: detectAspect(photo.filename),
       isCover: album.coverPhotoId === photo.id,
-      sortOrder: photo.sortOrder
+      sortOrder: photo.sortOrder,
+      detectedBibs: photo.detectedBibs,
+      bibOcrText: photo.bibOcrText,
+      bibOcrProcessedAt: photo.bibOcrProcessedAt ? photo.bibOcrProcessedAt.toISOString() : null
     }))
   };
 }
@@ -730,6 +810,372 @@ export async function deleteFavoriteSelection(selectionId: string, albumId: stri
   });
 }
 
+export async function processAlbumBibRecognition(albumId: string, mode: "all" | "pending" = "all") {
+  const album = await prisma.album.findUnique({
+    where: { id: albumId },
+    select: {
+      id: true,
+      slug: true,
+      bibRecognitionEnabled: true,
+      photos: {
+        where: { status: "READY" },
+        orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }],
+        select: {
+          id: true,
+          filename: true,
+          originalKey: true,
+          previewKey: true,
+          detectedBibs: true
+        }
+      }
+    }
+  });
+
+  if (!album) {
+    throw new Error("No se encontro el album.");
+  }
+
+  if (!album.bibRecognitionEnabled) {
+    throw new Error("Activa reconocimiento de bibs en este album antes de procesarlo.");
+  }
+
+  let processedCount = 0;
+  let recognizedCount = 0;
+  let failedCount = 0;
+
+  const photosToProcess =
+    mode === "pending" ? album.photos.filter((photo) => photo.detectedBibs.length === 0) : album.photos;
+
+  for (const photo of photosToProcess) {
+      try {
+        const sourceKey = photo.previewKey ?? photo.originalKey;
+        const { body } = await readPhotoBinary(sourceKey);
+        const result = await detectBibs(body, photo.filename);
+
+        await prisma.photo.update({
+        where: { id: photo.id },
+        data: {
+          detectedBibs: result.bibs,
+          bibOcrText: result.parsedText || null,
+          bibOcrProcessedAt: new Date()
+        }
+      });
+
+      processedCount += 1;
+      if (result.bibs.length > 0) {
+        recognizedCount += 1;
+      }
+    } catch {
+      await prisma.photo.update({
+        where: { id: photo.id },
+        data: {
+          detectedBibs: [],
+          bibOcrText: null,
+          bibOcrProcessedAt: new Date()
+        }
+      });
+      processedCount += 1;
+      failedCount += 1;
+    }
+  }
+
+  await prisma.album.update({
+    where: { id: album.id },
+    data: { bibRecognitionProcessedAt: new Date() }
+  });
+
+  return {
+    slug: album.slug,
+    processedCount,
+    recognizedCount,
+    failedCount,
+    skippedCount: album.photos.length - photosToProcess.length
+  };
+}
+
+export async function enqueueAlbumBibRecognitionJob(albumId: string, mode: "all" | "pending" = "pending", batchSize = 25) {
+  const safeBatchSize = Math.min(Math.max(batchSize, 5), 50);
+  const album = await prisma.album.findUnique({
+    where: { id: albumId },
+    select: {
+      id: true,
+      bibRecognitionEnabled: true,
+      photos: {
+        where: { status: "READY" },
+        orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }],
+        select: {
+          id: true,
+          detectedBibs: true
+        }
+      }
+    }
+  });
+
+  if (!album) {
+    throw new Error("No se encontro el album.");
+  }
+
+  if (!album.bibRecognitionEnabled) {
+    throw new Error("Activa reconocimiento de bibs en este album antes de procesarlo.");
+  }
+
+  const remainingPhotoIds =
+    mode === "pending"
+      ? album.photos.filter((photo) => photo.detectedBibs.length === 0).map((photo) => photo.id)
+      : album.photos.map((photo) => photo.id);
+
+  const payload: BibJobPayload = {
+    mode,
+    batchSize: safeBatchSize,
+    remainingPhotoIds,
+    total: remainingPhotoIds.length,
+    processed: 0,
+    recognized: 0,
+    failed: 0,
+    skipped: album.photos.length - remainingPhotoIds.length
+  };
+
+  const existingJob = await prisma.job.findFirst({
+    where: {
+      albumId,
+      type: JobType.OCR_BIB,
+      status: {
+        in: [JobStatus.PENDING, JobStatus.RUNNING]
+      }
+    },
+    orderBy: { updatedAt: "desc" },
+    select: { id: true }
+  });
+
+  const job = existingJob
+    ? await prisma.job.update({
+        where: { id: existingJob.id },
+        data: {
+          status: JobStatus.PENDING,
+          payload,
+          attempts: 0,
+          runAt: new Date()
+        }
+      })
+    : await prisma.job.create({
+        data: {
+          albumId,
+          type: JobType.OCR_BIB,
+          status: JobStatus.PENDING,
+          payload
+        }
+      });
+
+  return {
+    jobId: job.id,
+    total: payload.total,
+    batchSize: payload.batchSize,
+    remaining: payload.remainingPhotoIds.length
+  };
+}
+
+export async function processNextBibRecognitionBatch(albumId: string) {
+  const job = await prisma.job.findFirst({
+    where: {
+      albumId,
+      type: JobType.OCR_BIB,
+      status: {
+        in: [JobStatus.PENDING, JobStatus.RUNNING]
+      }
+    },
+    orderBy: { updatedAt: "desc" },
+    select: {
+      id: true,
+      albumId: true,
+      status: true,
+      payload: true
+    }
+  });
+
+  if (!job) {
+    throw new Error("No hay una cola OCR activa para este album.");
+  }
+
+  const payload = normalizeBibJobPayload(job.payload);
+
+  if (!payload) {
+    throw new Error("La cola OCR no tiene un formato valido.");
+  }
+
+  if (payload.remainingPhotoIds.length === 0) {
+    await prisma.job.update({
+      where: { id: job.id },
+      data: {
+        status: JobStatus.COMPLETED
+      }
+    });
+
+    return {
+      jobId: job.id,
+      processedInBatch: 0,
+      recognizedInBatch: 0,
+      failedInBatch: 0,
+      remaining: 0,
+      completed: true,
+      totals: payload
+    };
+  }
+
+  await prisma.job.update({
+    where: { id: job.id },
+    data: {
+      status: JobStatus.RUNNING,
+      attempts: {
+        increment: 1
+      }
+    }
+  });
+
+  const photoIds = payload.remainingPhotoIds.slice(0, payload.batchSize);
+  let processedInBatch = 0;
+  let recognizedInBatch = 0;
+  let failedInBatch = 0;
+
+  for (const photoId of photoIds) {
+    try {
+      const result = await processSinglePhotoBibRecognition(albumId, photoId);
+      processedInBatch += 1;
+      if (result.bibs.length > 0) {
+        recognizedInBatch += 1;
+      }
+    } catch {
+      processedInBatch += 1;
+      failedInBatch += 1;
+    }
+  }
+
+  const nextPayload: BibJobPayload = {
+    ...payload,
+    remainingPhotoIds: payload.remainingPhotoIds.slice(photoIds.length),
+    processed: payload.processed + processedInBatch,
+    recognized: payload.recognized + recognizedInBatch,
+    failed: payload.failed + failedInBatch
+  };
+
+  const completed = nextPayload.remainingPhotoIds.length === 0;
+
+  await prisma.job.update({
+    where: { id: job.id },
+    data: {
+      status: completed ? JobStatus.COMPLETED : JobStatus.PENDING,
+      payload: nextPayload,
+      runAt: new Date()
+    }
+  });
+
+  return {
+    jobId: job.id,
+    processedInBatch,
+    recognizedInBatch,
+    failedInBatch,
+    remaining: nextPayload.remainingPhotoIds.length,
+    completed,
+    totals: nextPayload
+  };
+}
+
+export async function processSinglePhotoBibRecognition(albumId: string, photoId: string) {
+  const photo = await prisma.photo.findUnique({
+    where: { id: photoId },
+    select: {
+      id: true,
+      albumId: true,
+      filename: true,
+      originalKey: true,
+      previewKey: true,
+      album: {
+        select: {
+          id: true,
+          slug: true,
+          bibRecognitionEnabled: true
+        }
+      }
+    }
+  });
+
+  if (!photo || photo.albumId !== albumId) {
+    throw new Error("No se encontro la foto.");
+  }
+
+  if (!photo.album.bibRecognitionEnabled) {
+    throw new Error("Activa reconocimiento de bibs en este album antes de procesar una foto.");
+  }
+
+  const sourceKey = photo.previewKey ?? photo.originalKey;
+  const { body } = await readPhotoBinary(sourceKey);
+  const result = await detectBibs(body, photo.filename);
+
+  await prisma.photo.update({
+    where: { id: photo.id },
+    data: {
+      detectedBibs: result.bibs,
+      bibOcrText: result.parsedText || null,
+      bibOcrProcessedAt: new Date()
+    }
+  });
+
+  await prisma.album.update({
+    where: { id: albumId },
+    data: { bibRecognitionProcessedAt: new Date() }
+  });
+
+  return {
+    slug: photo.album.slug,
+    bibs: result.bibs
+  };
+}
+
+export async function updatePhotoBibsManually(albumId: string, photoId: string, bibs: string[]) {
+  const photo = await prisma.photo.findUnique({
+    where: { id: photoId },
+    select: {
+      id: true,
+      albumId: true,
+        album: {
+          select: {
+            slug: true,
+            bibRecognitionEnabled: true
+          }
+        }
+      }
+    });
+
+  if (!photo || photo.albumId !== albumId) {
+    throw new Error("No se encontro la foto.");
+  }
+
+  if (!photo.album.bibRecognitionEnabled) {
+    throw new Error("Activa reconocimiento de bibs en este album antes de guardar un bib manual.");
+  }
+
+  const normalizedBibs = Array.from(
+    new Set(
+      bibs
+        .map((value) => value.replace(/\D+/g, "").trim())
+        .filter((value) => value.length >= 2 && value.length <= 6)
+    )
+  );
+
+  await prisma.photo.update({
+    where: { id: photo.id },
+    data: {
+      detectedBibs: normalizedBibs,
+      bibOcrText: normalizedBibs.length > 0 ? "__manual__" : null,
+      bibOcrProcessedAt: new Date()
+    }
+  });
+
+  return {
+    slug: photo.album.slug,
+    bibs: normalizedBibs
+  };
+}
+
 export function buildGalleryPhotosFromAlbum(
   albumTitle: string,
   photos: Array<{
@@ -739,6 +1185,7 @@ export function buildGalleryPhotosFromAlbum(
     originalKey: string;
     filename: string;
     sortOrder: number;
+    detectedBibs?: string[];
   }>
 ): GalleryPhoto[] {
   return photos.map((photo, index) => ({
@@ -747,7 +1194,8 @@ export function buildGalleryPhotosFromAlbum(
     thumbUrl: photo.thumbKey ? toMediaRoute(photo.thumbKey) : buildPhotoUrl(photo),
     title: buildPublicPhotoTitle(albumTitle, photo.sortOrder ?? index),
     aspect: detectAspect(photo.filename),
-    sortOrder: photo.sortOrder ?? index
+    sortOrder: photo.sortOrder ?? index,
+    detectedBibs: photo.detectedBibs ?? []
   }));
 }
 

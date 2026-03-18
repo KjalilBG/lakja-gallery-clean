@@ -45,6 +45,7 @@ enum DownloadType {
 enum JobType {
   GENERATE_PREVIEW
   GENERATE_ZIP
+  OCR_BIB
 }
 
 enum JobStatus {
@@ -124,6 +125,8 @@ model Album {
   allowSingleDownload    Boolean          @default(true)
   allowFavoritesDownload Boolean          @default(true)
   allowFullDownload      Boolean          @default(false)
+  bibRecognitionEnabled  Boolean          @default(false)
+  bibRecognitionProcessedAt DateTime?
   isFeatured             Boolean          @default(false)
   createdAt              DateTime         @default(now())
   updatedAt              DateTime         @updatedAt
@@ -150,6 +153,9 @@ model Photo {
   width       Int?
   height      Int?
   sizeBytes   Int?
+  detectedBibs String[]   @default([])
+  bibOcrText   String?
+  bibOcrProcessedAt DateTime?
   sortOrder   Int         @default(0)
   status      PhotoStatus @default(PROCESSING)
   createdAt   DateTime    @default(now())

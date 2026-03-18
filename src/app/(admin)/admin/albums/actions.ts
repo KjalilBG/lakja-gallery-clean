@@ -12,8 +12,11 @@ import {
   deleteFavoriteSelection,
   getAlbumPasswordMetaById,
   moveAlbumPhoto,
+  processAlbumBibRecognition,
+  processSinglePhotoBibRecognition,
   saveAlbumPhotos,
   setAlbumCoverPhoto,
+  updatePhotoBibsManually,
   updateAlbum
 } from "@/lib/albums";
 import { requireAdminSession } from "@/lib/auth-guard";
@@ -32,7 +35,8 @@ const albumSchema = z.object({
   password: z.string().trim().optional(),
   allowSingleDownload: z.boolean(),
   allowFavoritesDownload: z.boolean(),
-  allowFullDownload: z.boolean()
+  allowFullDownload: z.boolean(),
+  bibRecognitionEnabled: z.boolean()
 });
 
 export async function createAlbumAction(formData: FormData) {
@@ -50,7 +54,8 @@ export async function createAlbumAction(formData: FormData) {
     password: formData.get("password") || undefined,
     allowSingleDownload: formData.get("allowSingleDownload") === "on",
     allowFavoritesDownload: formData.get("allowFavoritesDownload") === "on",
-    allowFullDownload: formData.get("allowFullDownload") === "on"
+    allowFullDownload: formData.get("allowFullDownload") === "on",
+    bibRecognitionEnabled: formData.get("bibRecognitionEnabled") === "on"
   });
 
   if (parsed.visibility === AlbumVisibility.PASSWORD && (!parsed.password || parsed.password.length < 4)) {
@@ -141,7 +146,8 @@ export async function updateAlbumAction(formData: FormData) {
     password: formData.get("password") || undefined,
     allowSingleDownload: formData.get("allowSingleDownload") === "on",
     allowFavoritesDownload: formData.get("allowFavoritesDownload") === "on",
-    allowFullDownload: formData.get("allowFullDownload") === "on"
+    allowFullDownload: formData.get("allowFullDownload") === "on",
+    bibRecognitionEnabled: formData.get("bibRecognitionEnabled") === "on"
   });
 
   const currentAlbum = await getAlbumPasswordMetaById(albumId);
@@ -171,6 +177,25 @@ export async function updateAlbumAction(formData: FormData) {
   revalidatePath(`/g/${previousSlug}`);
   revalidatePath(`/g/${album.slug}`);
   redirect(`/admin/albums/${albumId}?saved=1`);
+}
+
+export async function processAlbumBibRecognitionAction(formData: FormData) {
+  await requireAdminSession("/admin/albums");
+  const albumId = z.string().cuid().parse(formData.get("albumId"));
+  try {
+    const result = await processAlbumBibRecognition(albumId);
+
+    revalidatePath(`/admin/albums/${albumId}`);
+    revalidatePath("/admin/albums");
+    revalidatePath("/admin");
+    revalidatePath(`/g/${result.slug}`);
+    redirect(
+      `/admin/albums/${albumId}?ocr=1&recognized=${result.recognizedCount}&processed=${result.processedCount}&failed=${result.failedCount}`
+    );
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "No se pudo procesar OCR.";
+    redirect(`/admin/albums/${albumId}?ocrError=${encodeURIComponent(message)}`);
+  }
 }
 
 export async function deleteAlbumPhotoAction(formData: FormData) {
@@ -216,4 +241,45 @@ export async function deleteFavoriteSelectionAction(formData: FormData) {
   revalidatePath("/admin/albums");
   revalidatePath("/admin");
   redirect(`/admin/albums/${albumId}?saved=1`);
+}
+
+export async function processPhotoBibRecognitionAction(formData: FormData) {
+  await requireAdminSession("/admin/albums");
+  const albumId = z.string().cuid().parse(formData.get("albumId"));
+  const photoId = z.string().cuid().parse(formData.get("photoId"));
+
+  try {
+    const result = await processSinglePhotoBibRecognition(albumId, photoId);
+    revalidatePath(`/admin/albums/${albumId}`);
+    revalidatePath(`/g/${result.slug}`);
+    redirect(`/admin/albums/${albumId}?ocrPhoto=1`);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "No se pudo reintentar OCR en la foto.";
+    redirect(`/admin/albums/${albumId}?ocrError=${encodeURIComponent(message)}`);
+  }
+}
+
+export async function updatePhotoBibsManualAction(formData: FormData) {
+  await requireAdminSession("/admin/albums");
+  const albumId = z.string().cuid().parse(formData.get("albumId"));
+  const photoId = z.string().cuid().parse(formData.get("photoId"));
+  const rawValue = formData.get("manualBibs");
+  const rawBibs = typeof rawValue === "string" ? rawValue : "";
+
+  try {
+    const result = await updatePhotoBibsManually(
+      albumId,
+      photoId,
+      rawBibs
+        .split(/[,\s]+/)
+        .map((value) => value.trim())
+        .filter(Boolean)
+    );
+    revalidatePath(`/admin/albums/${albumId}`);
+    revalidatePath(`/g/${result.slug}`);
+    redirect(`/admin/albums/${albumId}?ocrManual=1`);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "No se pudo guardar el bib manual.";
+    redirect(`/admin/albums/${albumId}?ocrError=${encodeURIComponent(message)}`);
+  }
 }

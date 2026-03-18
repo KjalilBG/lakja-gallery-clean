@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { GripVertical, Search, SquareCheckBig, Star, Trash2 } from "lucide-react";
+import { CheckCircle2, FileSearch, GripVertical, LoaderCircle, Search, SquareCheckBig, Star, Trash2 } from "lucide-react";
 
 import type { GalleryPhoto } from "@/features/albums/types";
 import { cn } from "@/lib/utils";
@@ -11,31 +11,70 @@ type AlbumPhotoWorkspaceProps = {
   albumId: string;
   slug: string;
   photos: GalleryPhoto[];
+  bibRecognitionEnabled?: boolean;
 };
 
 type ViewMode = "comfortable" | "compact";
+type BibFilter = "all" | "pending" | "detected" | "manual";
 
-export function AlbumPhotoWorkspace({ albumId, slug, photos }: AlbumPhotoWorkspaceProps) {
+function getBibStatus(photo: GalleryPhoto): BibFilter {
+  if (photo.bibOcrText === "__manual__") {
+    return "manual";
+  }
+
+  if ((photo.detectedBibs ?? []).length > 0) {
+    return "detected";
+  }
+
+  return "pending";
+}
+
+export function AlbumPhotoWorkspace({ albumId, slug, photos, bibRecognitionEnabled = false }: AlbumPhotoWorkspaceProps) {
   const router = useRouter();
   const [query, setQuery] = useState("");
   const [viewMode, setViewMode] = useState<ViewMode>("comfortable");
+  const [bibFilter, setBibFilter] = useState<BibFilter>("all");
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [draggingId, setDraggingId] = useState<string | null>(null);
   const [hoveredDropId, setHoveredDropId] = useState<string | null>(null);
   const [isMutating, setIsMutating] = useState(false);
+  const [manualBibValues, setManualBibValues] = useState<Record<string, string>>({});
+  const [photoOcrLoading, setPhotoOcrLoading] = useState<Record<string, boolean>>({});
+  const [photoManualLoading, setPhotoManualLoading] = useState<Record<string, boolean>>({});
+  const [photoBibMessages, setPhotoBibMessages] = useState<Record<string, { type: "success" | "error"; text: string }>>({});
 
   const filteredPhotos = useMemo(() => {
     const normalizedQuery = query.trim().toLowerCase();
 
-    if (!normalizedQuery) {
-      return photos;
-    }
-
     return photos.filter((photo, index) => {
       const positionLabel = `${(photo.sortOrder ?? index) + 1}`;
-      return photo.title.toLowerCase().includes(normalizedQuery) || positionLabel.includes(normalizedQuery);
+      const bibLabel = bibRecognitionEnabled ? (photo.detectedBibs ?? []).join(" ") : "";
+      const matchesQuery =
+        photo.title.toLowerCase().includes(normalizedQuery) ||
+        positionLabel.includes(normalizedQuery) ||
+        bibLabel.includes(normalizedQuery);
+      const matchesFilter = !bibRecognitionEnabled || bibFilter === "all" ? true : getBibStatus(photo) === bibFilter;
+
+      return (normalizedQuery ? matchesQuery : true) && matchesFilter;
     });
-  }, [photos, query]);
+  }, [bibFilter, bibRecognitionEnabled, photos, query]);
+
+  const bibStats = useMemo(() => {
+    if (!bibRecognitionEnabled) {
+      return { pending: 0, detected: 0, manual: 0 };
+    }
+
+    return photos.reduce(
+      (totals, photo) => {
+        const status = getBibStatus(photo);
+        if (status === "pending") totals.pending += 1;
+        if (status === "detected") totals.detected += 1;
+        if (status === "manual") totals.manual += 1;
+        return totals;
+      },
+      { pending: 0, detected: 0, manual: 0 }
+    );
+  }, [bibRecognitionEnabled, photos]);
 
   function toggleSelected(photoId: string) {
     setSelectedIds((current) => (current.includes(photoId) ? current.filter((id) => id !== photoId) : [...current, photoId]));
@@ -96,6 +135,110 @@ export function AlbumPhotoWorkspace({ albumId, slug, photos }: AlbumPhotoWorkspa
     await callMutation(`/api/admin/albums/${albumId}/photos/reorder`, { slug, orderedPhotoIds }, "saved=1");
   }
 
+  async function handleRetryPhotoOcr(photoId: string) {
+    setPhotoBibMessages((current) => {
+      const next = { ...current };
+      delete next[photoId];
+      return next;
+    });
+    setPhotoOcrLoading((current) => ({ ...current, [photoId]: true }));
+
+    try {
+      const response = await fetch(`/api/admin/albums/${albumId}/photos/${photoId}/bibs`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({ mode: "ocr" })
+      });
+
+      const data = (await response.json()) as { ok?: boolean; detectedBibs?: string[]; error?: string };
+
+      if (!response.ok || !data.ok) {
+        throw new Error(data.error || "No se pudo reintentar OCR.");
+      }
+
+      setPhotoBibMessages((current) => ({
+        ...current,
+        [photoId]: {
+          type: "success",
+          text:
+            data.detectedBibs && data.detectedBibs.length > 0
+              ? `Detectado: ${data.detectedBibs.join(", ")}`
+              : "OCR procesado, pero no detecto un bib claro."
+        }
+      }));
+      router.refresh();
+    } catch (error) {
+      setPhotoBibMessages((current) => ({
+        ...current,
+        [photoId]: {
+          type: "error",
+          text: error instanceof Error ? error.message : "No se pudo reintentar OCR."
+        }
+      }));
+    } finally {
+      setPhotoOcrLoading((current) => ({ ...current, [photoId]: false }));
+    }
+  }
+
+  async function handleSaveManualBibs(photoId: string, detectedBibs: string[] | undefined) {
+    const rawValue = manualBibValues[photoId] ?? (detectedBibs ?? []).join(", ");
+    const bibs = rawValue
+      .split(/[,\s]+/)
+      .map((value) => value.replace(/\D/g, "").trim())
+      .filter(Boolean);
+
+    setPhotoBibMessages((current) => {
+      const next = { ...current };
+      delete next[photoId];
+      return next;
+    });
+    setPhotoManualLoading((current) => ({ ...current, [photoId]: true }));
+
+    try {
+      const response = await fetch(`/api/admin/albums/${albumId}/photos/${photoId}/bibs`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({ mode: "manual", bibs })
+      });
+
+      const data = (await response.json()) as { ok?: boolean; detectedBibs?: string[]; error?: string };
+
+      if (!response.ok || !data.ok) {
+        throw new Error(data.error || "No se pudo guardar el bib manual.");
+      }
+
+      setManualBibValues((current) => ({
+        ...current,
+        [photoId]: (data.detectedBibs ?? []).join(", ")
+      }));
+      setPhotoBibMessages((current) => ({
+        ...current,
+        [photoId]: {
+          type: "success",
+          text:
+            data.detectedBibs && data.detectedBibs.length > 0
+              ? `Guardado manual: ${data.detectedBibs.join(", ")}`
+              : "Se limpio el bib manual de esta foto."
+        }
+      }));
+      router.refresh();
+    } catch (error) {
+      setPhotoBibMessages((current) => ({
+        ...current,
+        [photoId]: {
+          type: "error",
+          text: error instanceof Error ? error.message : "No se pudo guardar el bib manual."
+        }
+      }));
+    } finally {
+      setPhotoManualLoading((current) => ({ ...current, [photoId]: false }));
+    }
+  }
+
   function handleDrop(targetId: string) {
     if (!draggingId || draggingId === targetId) {
       setDraggingId(null);
@@ -146,6 +289,38 @@ export function AlbumPhotoWorkspace({ albumId, slug, photos }: AlbumPhotoWorkspa
             <span>{filteredPhotos.length} fotos visibles</span>
             {selectedIds.length > 0 ? <span>{selectedIds.length} seleccionadas</span> : null}
           </div>
+          {bibRecognitionEnabled ? (
+            <div className="flex flex-wrap items-center gap-2">
+              {[
+                { value: "all", label: "Todas", count: photos.length },
+                { value: "pending", label: "Sin detectar", count: bibStats.pending },
+                { value: "detected", label: "Detectadas", count: bibStats.detected },
+                { value: "manual", label: "Manuales", count: bibStats.manual }
+              ].map((option) => (
+                <button
+                  key={option.value}
+                  type="button"
+                  onClick={() => setBibFilter(option.value as BibFilter)}
+                  className={cn(
+                    "inline-flex items-center gap-2 rounded-full border px-4 py-2 text-[11px] font-extrabold uppercase tracking-[0.16em] transition",
+                    bibFilter === option.value
+                      ? "border-slate-900 bg-slate-900 text-white"
+                      : "border-slate-200 bg-white text-slate-500 hover:border-lime-300 hover:text-slate-900"
+                  )}
+                >
+                  {option.label}
+                  <span
+                    className={cn(
+                      "rounded-full px-2 py-0.5 text-[10px]",
+                      bibFilter === option.value ? "bg-white/15 text-white" : "bg-slate-100 text-slate-500"
+                    )}
+                  >
+                    {option.count}
+                  </span>
+                </button>
+              ))}
+            </div>
+          ) : null}
         </div>
 
         <div className="flex flex-wrap items-center gap-3">
@@ -226,6 +401,25 @@ export function AlbumPhotoWorkspace({ albumId, slug, photos }: AlbumPhotoWorkspa
                     Portada
                   </span>
                 ) : null}
+                {bibRecognitionEnabled ? (
+                  <span
+                    className={cn(
+                      "rounded-full font-extrabold uppercase tracking-[0.22em] shadow-[0_10px_22px_rgba(15,23,42,0.12)]",
+                      viewMode === "compact" ? "px-2 py-1 text-[9px]" : "px-3 py-2 text-[10px]",
+                      getBibStatus(photo) === "manual"
+                        ? "bg-fuchsia-500 text-white"
+                        : getBibStatus(photo) === "detected"
+                          ? "bg-sky-500 text-white"
+                          : "bg-white/96 text-slate-500"
+                    )}
+                  >
+                    {getBibStatus(photo) === "manual"
+                      ? "Manual"
+                      : getBibStatus(photo) === "detected"
+                        ? "Detectado"
+                        : "Sin detectar"}
+                  </span>
+                ) : null}
               </div>
               <div className={cn("absolute", viewMode === "compact" ? "right-2 top-2" : "right-4 top-4")}>
                 <span className={cn("inline-flex items-center justify-center rounded-full border border-slate-200 bg-white text-slate-400 shadow-[0_10px_22px_rgba(15,23,42,0.12)]", viewMode === "compact" ? "h-8 w-8" : "h-10 w-10")}>
@@ -241,6 +435,78 @@ export function AlbumPhotoWorkspace({ albumId, slug, photos }: AlbumPhotoWorkspa
                   {photo.isCover ? "Vista principal del album" : "Arrastra para reordenar"}
                 </p>
               </div>
+
+              {bibRecognitionEnabled ? (
+              <div className="rounded-[18px] border border-slate-200 bg-slate-50 px-3 py-3">
+                <div className="flex items-center gap-2">
+                  <FileSearch className="size-4 text-slate-400" />
+                  <p className="text-[11px] font-extrabold uppercase tracking-[0.16em] text-slate-500">OCR bib</p>
+                </div>
+                {photo.detectedBibs && photo.detectedBibs.length > 0 ? (
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    {photo.detectedBibs.map((bib) => (
+                      <span
+                        key={`${photo.id}-${bib}`}
+                        className="rounded-full border border-lime-200 bg-lime-50 px-3 py-1 text-[10px] font-extrabold uppercase tracking-[0.14em] text-lime-700"
+                      >
+                        #{bib}
+                      </span>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="mt-3 text-xs font-bold text-slate-500">Todavia no hay bib reconocido en esta foto.</p>
+                )}
+                {photo.bibOcrProcessedAt ? (
+                  <p className="mt-2 text-[11px] text-slate-400">Procesada manual o automaticamente.</p>
+                ) : null}
+                {photoBibMessages[photo.id] ? (
+                  <div
+                    className={cn(
+                      "mt-3 rounded-2xl px-3 py-2 text-[11px] font-bold",
+                      photoBibMessages[photo.id]?.type === "success"
+                        ? "border border-lime-200 bg-lime-50 text-lime-800"
+                        : "border border-rose-200 bg-rose-50 text-rose-800"
+                    )}
+                  >
+                    {photoBibMessages[photo.id]?.text}
+                  </div>
+                ) : null}
+                <div className="mt-3 grid gap-2">
+                  <button
+                    type="button"
+                    onClick={() => void handleRetryPhotoOcr(photo.id)}
+                    disabled={photoOcrLoading[photo.id] || photoManualLoading[photo.id]}
+                    className="inline-flex w-full items-center justify-center rounded-full border border-slate-200 bg-white px-4 py-2 text-[11px] font-extrabold uppercase tracking-[0.16em] text-slate-700 transition hover:border-lime-300 hover:text-slate-950 disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    {photoOcrLoading[photo.id] ? <LoaderCircle className="mr-2 size-3.5 animate-spin" /> : null}
+                    Reintentar OCR
+                  </button>
+
+                  <div className="space-y-2">
+                    <input
+                      value={manualBibValues[photo.id] ?? (photo.detectedBibs ?? []).join(", ")}
+                      onChange={(event) =>
+                        setManualBibValues((current) => ({
+                          ...current,
+                          [photo.id]: event.target.value
+                        }))
+                      }
+                      placeholder="Ej. 245, 246"
+                      className="w-full rounded-full border border-slate-200 bg-white px-4 py-2 text-xs font-medium text-slate-700 outline-none transition focus:border-lime-400"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => void handleSaveManualBibs(photo.id, photo.detectedBibs)}
+                      disabled={photoManualLoading[photo.id] || photoOcrLoading[photo.id]}
+                      className="inline-flex w-full items-center justify-center rounded-full bg-slate-900 px-4 py-2 text-[11px] font-extrabold uppercase tracking-[0.16em] text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      {photoManualLoading[photo.id] ? <LoaderCircle className="mr-2 size-3.5 animate-spin" /> : <CheckCircle2 className="mr-2 size-3.5" />}
+                      Guardar bib manual
+                    </button>
+                  </div>
+                </div>
+              </div>
+              ) : null}
 
               <div className={cn("grid gap-2", viewMode === "compact" ? "grid-cols-1" : "sm:grid-cols-2")}>
                 <button

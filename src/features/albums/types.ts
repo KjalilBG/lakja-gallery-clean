@@ -31,6 +31,9 @@ export type GalleryPhoto = {
   isFavorite?: boolean;
   isCover?: boolean;
   sortOrder?: number;
+  detectedBibs?: string[];
+  bibOcrText?: string | null;
+  bibOcrProcessedAt?: string | null;
 };
 
 export type AlbumDetail = {
@@ -51,6 +54,22 @@ export type AlbumDetail = {
   downloads: number;
   favoriteSelectionsCount: number;
   favoritePhotosCount: number;
+  bibRecognitionEnabled: boolean;
+  bibRecognitionProcessedAt: string | null;
+  bibRecognizedPhotosCount: number;
+  bibJob?: {
+    id: string;
+    status: "pending" | "running" | "completed" | "failed";
+    total: number;
+    processed: number;
+    recognized: number;
+    failed: number;
+    skipped: number;
+    remaining: number;
+    batchSize: number;
+    mode: "all" | "pending";
+    updatedAt: string;
+  } | null;
   permissions: AlbumPermissionSet;
   photos: GalleryPhoto[];
   favoriteSelections?: FavoriteSelectionSummary[];
