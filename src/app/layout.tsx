@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { SpeedInsights } from "@vercel/speed-insights/next";
 
 import "@/app/globals.css";
 import { IntroSplash } from "@/components/ui/intro-splash";
@@ -52,6 +53,7 @@ export default async function RootLayout({ children }: Readonly<{ children: Reac
             <WhatsAppFloat whatsappNumber={settings.whatsappNumber} defaultMessage={settings.whatsappMessage} />
           ) : null}
         </div>
+        <SpeedInsights />
       </body>
     </html>
   );
