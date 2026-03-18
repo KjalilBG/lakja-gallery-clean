@@ -251,6 +251,14 @@ model SiteSettings {
   facebookUrl         String?
   whatsappNumber      String?
   whatsappMessage     String?
+  maintenanceMode     Boolean  @default(false)
+  maintenanceTitle    String   @default("Estamos afinando la experiencia de La Kja")
+  maintenanceMessage  String   @default("Estamos trabajando en mejoras para que la experiencia se sienta mas cuidada. Mientras tanto, puedes escribirme directamente por WhatsApp o volver en un momento.")
+  showWhatsAppFloat   Boolean  @default(true)
+  downloadsEnabled    Boolean  @default(true)
+  favoritesEnabled    Boolean  @default(true)
+  downloadPopupEnabled Boolean @default(true)
+  featuredAlbumIds    String[] @default([])
   downloadPopupTitle  String   @default("Tu descarga ya comenzo 📸✨")
   downloadPopupBody   String   @default("Gracias por estar aqui. Comparte este momento, etiquetanos y forma parte de nuestra comunidad.")
   homeBadge           String   @default("Estamos construyendo algo especial")

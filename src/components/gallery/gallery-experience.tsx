@@ -18,8 +18,12 @@ type GalleryExperienceProps = {
   slug: string;
   albumTitle: string;
   storageKey?: string;
+  allowSingleDownload?: boolean;
   allowFavoritesDownload?: boolean;
   allowFullDownload?: boolean;
+  favoritesEnabled: boolean;
+  downloadsEnabled: boolean;
+  downloadPopupEnabled: boolean;
   instagramUrl: string;
   facebookUrl: string;
   whatsappNumber: string;
@@ -32,8 +36,12 @@ export function GalleryExperience({
   slug,
   albumTitle,
   storageKey = "lakja-gallery-favorites",
+  allowSingleDownload = false,
   allowFavoritesDownload = false,
   allowFullDownload = false,
+  favoritesEnabled,
+  downloadsEnabled,
+  downloadPopupEnabled,
   instagramUrl,
   facebookUrl,
   whatsappNumber,
@@ -178,6 +186,30 @@ export function GalleryExperience({
     return nextValue;
   }
 
+  useEffect(() => {
+    const viewedKey = `${storageKey}-viewed`;
+
+    if (window.localStorage.getItem(viewedKey)) {
+      return;
+    }
+
+    const sessionId = getSessionId();
+
+    void fetch(`/api/albums/${slug}/view`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({ sessionId })
+    })
+      .then((response) => {
+        if (response.ok) {
+          window.localStorage.setItem(viewedKey, "1");
+        }
+      })
+      .catch(() => undefined);
+  }, [slug, storageKey]);
+
   async function submitFavorites() {
     if (favoriteIds.length === 0 || isSendingFavorites) return;
 
@@ -236,28 +268,45 @@ export function GalleryExperience({
   }
 
   function startDownload(intent: DownloadIntent) {
+    if (!downloadsEnabled) {
+      return;
+    }
+
+    const sessionId = getSessionId();
+
     if (intent.type === "all") {
-      window.location.href = `/api/albums/${slug}/download?type=all`;
+      window.location.href = `/api/albums/${slug}/download?type=all&sessionId=${encodeURIComponent(sessionId)}`;
     }
 
     if (intent.type === "favorites") {
       const params = new URLSearchParams({
         type: "favorites",
-        favorites: favoriteIds.join(",")
+        favorites: favoriteIds.join(","),
+        sessionId
       });
 
       window.location.href = `/api/albums/${slug}/download?${params.toString()}`;
     }
 
     if (intent.type === "single") {
-      const anchor = document.createElement("a");
-      anchor.href = intent.photoUrl;
-      anchor.download = intent.photoTitle;
-      anchor.click();
+      const photo = photos.find((item) => item.id === resolvedActivePhoto?.id || item.url === intent.photoUrl);
+      if (!photo || !allowSingleDownload) {
+        return;
+      }
+
+      const params = new URLSearchParams({
+        type: "single",
+        photoId: photo.id,
+        sessionId
+      });
+
+      window.location.href = `/api/albums/${slug}/download?${params.toString()}`;
     }
 
-    setIsClosingDownloadPopup(false);
-    setDownloadIntent(intent);
+    if (downloadPopupEnabled) {
+      setIsClosingDownloadPopup(false);
+      setDownloadIntent(intent);
+    }
   }
 
   function closeDownloadPopup() {
@@ -280,24 +329,28 @@ export function GalleryExperience({
       <section className="sticky top-[78px] z-10 rounded-[22px] border border-slate-200 bg-white px-3 py-3 shadow-[0_16px_40px_rgba(15,23,42,0.08)] md:top-[92px] md:rounded-[30px] md:px-5 md:py-4">
         <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
           <div className="-mx-1 flex snap-x snap-mandatory gap-2 overflow-x-auto px-1 pb-1 md:mx-0 md:flex-wrap md:overflow-visible md:px-0 md:pb-0 md:gap-3 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-            <button
-              type="button"
-              onClick={() => setShowOnlyFavorites(false)}
-              className={`shrink-0 snap-start rounded-full border px-4 py-2.5 text-xs font-bold uppercase tracking-[0.14em] transition md:px-5 md:py-3 md:text-sm md:tracking-[0.18em] ${
-                !showOnlyFavorites ? "border-lime-300 bg-lime-50 text-lime-700" : "border-slate-200 text-slate-500"
-              }`}
-            >
-              Todas
-            </button>
-            <button
-              type="button"
-              onClick={() => setShowOnlyFavorites((current) => !current)}
-              className={`shrink-0 snap-start rounded-full border px-4 py-2.5 text-xs font-bold uppercase tracking-[0.14em] transition md:px-5 md:py-3 md:text-sm md:tracking-[0.18em] ${
-                showOnlyFavorites ? "border-fuchsia-300 bg-fuchsia-50 text-fuchsia-700" : "border-slate-200 text-slate-700"
-              }`}
-            >
-              Mis favoritas ({favoriteIds.length})
-            </button>
+            {favoritesEnabled ? (
+              <>
+                <button
+                  type="button"
+                  onClick={() => setShowOnlyFavorites(false)}
+                  className={`shrink-0 snap-start rounded-full border px-4 py-2.5 text-xs font-bold uppercase tracking-[0.14em] transition md:px-5 md:py-3 md:text-sm md:tracking-[0.18em] ${
+                    !showOnlyFavorites ? "border-lime-300 bg-lime-50 text-lime-700" : "border-slate-200 text-slate-500"
+                  }`}
+                >
+                  Todas
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setShowOnlyFavorites((current) => !current)}
+                  className={`shrink-0 snap-start rounded-full border px-4 py-2.5 text-xs font-bold uppercase tracking-[0.14em] transition md:px-5 md:py-3 md:text-sm md:tracking-[0.18em] ${
+                    showOnlyFavorites ? "border-fuchsia-300 bg-fuchsia-50 text-fuchsia-700" : "border-slate-200 text-slate-700"
+                  }`}
+                >
+                  Mis favoritas ({favoriteIds.length})
+                </button>
+              </>
+            ) : null}
             <div className="shrink-0 snap-start rounded-full border border-slate-200 px-4 py-2.5 text-xs font-bold uppercase tracking-[0.14em] text-slate-500 md:px-5 md:py-3 md:text-sm md:tracking-[0.18em]">
               {visiblePhotos.length} fotos
             </div>
@@ -307,7 +360,7 @@ export function GalleryExperience({
             <Button
               variant="pink"
               onClick={() => startDownload({ type: "favorites" })}
-              disabled={!allowFavoritesDownload || favoriteIds.length === 0}
+              disabled={!favoritesEnabled || !allowFavoritesDownload || favoriteIds.length === 0}
               className="w-full justify-center px-3 py-2.5 text-[11px] tracking-[0.08em] disabled:cursor-not-allowed disabled:opacity-50 md:px-4 md:py-3 md:text-sm md:tracking-[0.16em]"
             >
               <Heart className="mr-2 size-4" />
@@ -315,7 +368,7 @@ export function GalleryExperience({
             </Button>
             <Button
               onClick={() => startDownload({ type: "all" })}
-              disabled={!allowFullDownload}
+              disabled={!downloadsEnabled || !allowFullDownload}
               className="w-full justify-center px-3 py-2.5 text-[11px] tracking-[0.08em] disabled:cursor-not-allowed disabled:opacity-50 md:px-4 md:py-3 md:text-sm md:tracking-[0.16em]"
             >
               <Download className="mr-2 size-4" />
@@ -323,6 +376,7 @@ export function GalleryExperience({
             </Button>
           </div>
         </div>
+        {favoritesEnabled ? (
         <div className="mt-3 flex justify-end">
           <Button
             type="button"
@@ -335,6 +389,7 @@ export function GalleryExperience({
             Enviar favoritas
           </Button>
         </div>
+        ) : null}
       </section>
 
       {visiblePhotos.length > 0 ? (
@@ -396,30 +451,33 @@ export function GalleryExperience({
                     <p className="text-2xl font-black tracking-tight text-slate-950">{albumTitle}</p>
                   </div>
 
-                  <button
-                    type="button"
-                    className={`inline-flex flex-1 items-center justify-center gap-2 rounded-full px-3 py-3 text-[11px] font-extrabold uppercase tracking-[0.12em] transition sm:min-w-[190px] sm:flex-none sm:px-5 lg:min-w-0 lg:w-full lg:justify-center ${
-                      resolvedActivePhoto.isFavorite ? "bg-fuchsia-50 text-fuchsia-600" : "text-slate-500 hover:bg-slate-100"
+                    {favoritesEnabled ? (
+                    <button
+                      type="button"
+                      className={`inline-flex flex-1 items-center justify-center gap-2 rounded-full px-3 py-3 text-[11px] font-extrabold uppercase tracking-[0.12em] transition sm:min-w-[190px] sm:flex-none sm:px-5 lg:min-w-0 lg:w-full lg:justify-center ${
+                        resolvedActivePhoto.isFavorite ? "bg-fuchsia-50 text-fuchsia-600" : "text-slate-500 hover:bg-slate-100"
                     }`}
                     onClick={() => toggleFavorite(resolvedActivePhoto.id)}
                   >
-                    <Heart className={`size-4 ${resolvedActivePhoto.isFavorite ? "fill-current" : ""}`} />
-                    Favorita
-                  </button>
-                  <button
-                    type="button"
-                    className="inline-flex flex-1 items-center justify-center gap-2 rounded-full px-3 py-3 text-[11px] font-extrabold uppercase tracking-[0.12em] text-slate-500 transition hover:bg-slate-100 sm:min-w-[190px] sm:flex-none sm:px-5 lg:min-w-0 lg:w-full lg:justify-center"
-                    onClick={() =>
-                      startDownload({
-                        type: "single",
-                        photoUrl: resolvedActivePhoto.url,
-                        photoTitle: resolvedActivePhoto.title
-                      })
-                    }
-                  >
-                    <Download className="size-4" />
-                    Descargar
-                  </button>
+                      <Heart className={`size-4 ${resolvedActivePhoto.isFavorite ? "fill-current" : ""}`} />
+                      Favorita
+                    </button>
+                    ) : null}
+                    <button
+                      type="button"
+                      disabled={!allowSingleDownload}
+                      className="inline-flex flex-1 items-center justify-center gap-2 rounded-full px-3 py-3 text-[11px] font-extrabold uppercase tracking-[0.12em] text-slate-500 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-45 sm:min-w-[190px] sm:flex-none sm:px-5 lg:min-w-0 lg:w-full lg:justify-center"
+                      onClick={() =>
+                        startDownload({
+                          type: "single",
+                          photoUrl: resolvedActivePhoto.url,
+                          photoTitle: resolvedActivePhoto.title
+                        })
+                      }
+                    >
+                      <Download className="size-4" />
+                      Descargar
+                    </button>
                   <button
                     type="button"
                     className="hidden rounded-full border border-slate-200 px-4 py-3 text-[11px] font-extrabold uppercase tracking-[0.14em] text-slate-500 transition hover:border-slate-300 hover:text-slate-900 lg:inline-flex lg:items-center lg:justify-center"
@@ -485,7 +543,7 @@ export function GalleryExperience({
         </div>
       ) : null}
 
-      {showSendFavorites ? (
+      {favoritesEnabled && showSendFavorites ? (
         <div className="fixed inset-0 z-[65] bg-slate-950/60">
           <div className="flex min-h-screen items-center justify-center px-4">
             <div className="w-full max-w-lg rounded-[30px] border border-white/20 bg-white p-6 shadow-[0_24px_70px_rgba(15,23,42,0.25)] sm:p-8">

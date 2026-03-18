@@ -1,12 +1,13 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { AlbumStatus, AlbumVisibility } from "@prisma/client";
-import { ExternalLink, Heart, Settings2, Trash2, UploadCloud } from "lucide-react";
+import { ArrowLeft, Download, ExternalLink, Eye, FileText, Heart, Settings2, Trash2, UploadCloud } from "lucide-react";
 
 import { AlbumPhotoWorkspace } from "@/components/admin/album-photo-workspace";
 import { AlbumPhotoUploader } from "@/components/admin/album-photo-uploader";
 import { AlbumSettingsFields } from "@/components/admin/album-settings-fields";
 import { ConfirmDeleteAlbumButton } from "@/components/admin/confirm-delete-album-button";
+import { CopyAlbumLinkButton } from "@/components/admin/copy-album-link-button";
 import { SubmitButton } from "@/components/forms/submit-button";
 import { Button } from "@/components/ui/button";
 import { getObjectPositionFromFocus } from "@/lib/cover";
@@ -33,6 +34,18 @@ export default async function AlbumDetailPage({ params, searchParams }: AlbumDet
 
   return (
     <div className="space-y-6">
+      <div className="flex flex-wrap items-center justify-between gap-3 rounded-[26px] border border-slate-200 bg-white px-5 py-4 shadow-[0_12px_30px_rgba(15,23,42,0.05)]">
+        <div className="flex items-center gap-3 text-sm font-bold text-slate-500">
+          <Link href="/admin/albums" className="inline-flex items-center gap-2 rounded-full border border-slate-200 px-4 py-2 transition hover:border-lime-300 hover:text-slate-900">
+            <ArrowLeft className="size-4" />
+            Volver a albumes
+          </Link>
+          <span className="hidden text-slate-300 md:inline">/</span>
+          <span className="truncate text-slate-900">{album.title}</span>
+        </div>
+        <CopyAlbumLinkButton slug={album.slug} />
+      </div>
+
       {resolvedSearchParams.saved === "1" ? (
         <div className="rounded-[24px] border border-lime-200 bg-lime-50 px-5 py-4 text-sm font-bold text-lime-800">
           Los cambios del album se guardaron correctamente.
@@ -66,17 +79,14 @@ export default async function AlbumDetailPage({ params, searchParams }: AlbumDet
               </p>
             </div>
             <div className="flex flex-wrap gap-3">
-              <Link href={`/g/${album.slug}`}>
+              <Link href={`/g/${album.slug}`} target="_blank" rel="noreferrer">
                 <Button variant="pink">
                   <ExternalLink className="mr-2 size-4" />
                   Ver galeria
                 </Button>
               </Link>
-              <Link href="/admin/albums">
-                <Button variant="secondary">Volver</Button>
-              </Link>
             </div>
-            <div className="grid gap-3 md:grid-cols-3">
+            <div className="grid gap-3 md:grid-cols-4">
               <div className="rounded-[24px] border border-slate-200 bg-slate-50 px-5 py-4">
                 <p className="text-[11px] font-extrabold uppercase tracking-[0.24em] text-slate-400">Fecha</p>
                 <p className="mt-2 text-lg font-black text-slate-900">{formatDate(album.eventDate)}</p>
@@ -87,7 +97,11 @@ export default async function AlbumDetailPage({ params, searchParams }: AlbumDet
               </div>
               <div className="rounded-[24px] border border-slate-200 bg-slate-50 px-5 py-4">
                 <p className="text-[11px] font-extrabold uppercase tracking-[0.24em] text-slate-400">URL publica</p>
-                <p className="mt-2 truncate text-sm font-bold text-slate-700">/g/{album.slug}</p>
+                <p className="mt-2 truncate text-sm font-bold text-slate-700">lakja.top/g/{album.slug}</p>
+              </div>
+              <div className="rounded-[24px] border border-slate-200 bg-slate-50 px-5 py-4">
+                <p className="text-[11px] font-extrabold uppercase tracking-[0.24em] text-slate-400">Listas recibidas</p>
+                <p className="mt-2 text-lg font-black text-slate-900">{album.favoriteSelectionsCount}</p>
               </div>
             </div>
           </div>
@@ -101,12 +115,44 @@ export default async function AlbumDetailPage({ params, searchParams }: AlbumDet
               <div className="space-y-3 px-5 py-5">
                 <p className="text-[11px] font-extrabold uppercase tracking-[0.24em] text-slate-400">Portada actual</p>
                 <p className="text-xl font-black text-slate-900">Vista principal del album</p>
-                <p className="rounded-[18px] border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-bold text-slate-700">
-                  /g/{album.slug}
-                </p>
               </div>
             </div>
           </div>
+        </div>
+      </section>
+
+      <section className="grid gap-4 md:grid-cols-3 xl:grid-cols-4">
+        <div className="rounded-[28px] border border-slate-200 bg-white px-5 py-5 shadow-[0_12px_30px_rgba(15,23,42,0.05)]">
+          <div className="flex items-center gap-3 text-slate-400">
+            <Eye className="size-5" />
+            <p className="text-[11px] font-extrabold uppercase tracking-[0.24em]">Visitas</p>
+          </div>
+          <p className="mt-3 text-3xl font-black text-slate-950">{album.views}</p>
+          <p className="mt-2 text-sm text-slate-500">Se registran una vez por sesion en la galeria publica.</p>
+        </div>
+        <div className="rounded-[28px] border border-slate-200 bg-white px-5 py-5 shadow-[0_12px_30px_rgba(15,23,42,0.05)]">
+          <div className="flex items-center gap-3 text-slate-400">
+            <Download className="size-5" />
+            <p className="text-[11px] font-extrabold uppercase tracking-[0.24em]">Descargas</p>
+          </div>
+          <p className="mt-3 text-3xl font-black text-slate-950">{album.downloads}</p>
+          <p className="mt-2 text-sm text-slate-500">Incluye descargas individuales y ZIP del album.</p>
+        </div>
+        <div className="rounded-[28px] border border-slate-200 bg-white px-5 py-5 shadow-[0_12px_30px_rgba(15,23,42,0.05)]">
+          <div className="flex items-center gap-3 text-slate-400">
+            <Heart className="size-5" />
+            <p className="text-[11px] font-extrabold uppercase tracking-[0.24em]">Favoritas</p>
+          </div>
+          <p className="mt-3 text-3xl font-black text-slate-950">{album.favoritePhotosCount}</p>
+          <p className="mt-2 text-sm text-slate-500">Total de fotos incluidas en listas enviadas.</p>
+        </div>
+        <div className="rounded-[28px] border border-slate-200 bg-white px-5 py-5 shadow-[0_12px_30px_rgba(15,23,42,0.05)]">
+          <div className="flex items-center gap-3 text-slate-400">
+            <FileText className="size-5" />
+            <p className="text-[11px] font-extrabold uppercase tracking-[0.24em]">Listas</p>
+          </div>
+          <p className="mt-3 text-3xl font-black text-slate-950">{album.favoriteSelectionsCount}</p>
+          <p className="mt-2 text-sm text-slate-500">Listas de seleccion que ya te enviaron clientes.</p>
         </div>
       </section>
 
@@ -298,6 +344,13 @@ export default async function AlbumDetailPage({ params, searchParams }: AlbumDet
                       </div>
                       {selection.message ? <p className="mt-3 text-sm leading-6 text-slate-600">{selection.message}</p> : null}
                       {selection.whatsapp ? <p className="mt-2 text-xs font-bold uppercase tracking-[0.14em] text-slate-400">{selection.whatsapp}</p> : null}
+                      <a
+                        href={`/api/admin/albums/${album.id}/favorite-selections/${selection.id}/export`}
+                        className="mt-4 inline-flex items-center rounded-full border border-slate-200 bg-white px-4 py-2 text-[11px] font-extrabold uppercase tracking-[0.14em] text-slate-700 transition hover:border-lime-300 hover:text-slate-950"
+                      >
+                        <FileText className="mr-2 size-4" />
+                        Descargar PDF
+                      </a>
                       <details className="mt-4 rounded-[18px] border border-slate-200 bg-white p-4">
                         <summary className="cursor-pointer text-sm font-bold text-slate-900">
                           Ver seleccion completa
@@ -308,7 +361,8 @@ export default async function AlbumDetailPage({ params, searchParams }: AlbumDet
                               <div className="aspect-square bg-cover bg-center" style={{ backgroundImage: `url(${photo.thumbUrl})` }} />
                               <div className="space-y-1 px-2.5 py-2.5">
                                 <p className="text-[10px] font-extrabold uppercase tracking-[0.16em] text-slate-400">#{photo.serial}</p>
-                                <p className="truncate text-xs font-bold text-slate-900">{photo.title}</p>
+                                <p className="truncate text-xs font-bold text-slate-900">{photo.platformName}</p>
+                                <p className="truncate text-[11px] text-slate-500">{photo.originalName}</p>
                               </div>
                             </div>
                           ))}

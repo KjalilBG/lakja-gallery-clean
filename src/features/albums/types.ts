@@ -47,6 +47,10 @@ export type AlbumDetail = {
   coverFocusX: number;
   coverFocusY: number;
   photoCount: number;
+  views: number;
+  downloads: number;
+  favoriteSelectionsCount: number;
+  favoritePhotosCount: number;
   permissions: AlbumPermissionSet;
   photos: GalleryPhoto[];
   favoriteSelections?: FavoriteSelectionSummary[];
@@ -63,6 +67,8 @@ export type FavoriteSelectionSummary = {
   photos: {
     id: string;
     title: string;
+    platformName: string;
+    originalName: string;
     thumbUrl: string;
     serial: number;
   }[];

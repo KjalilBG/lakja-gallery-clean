@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 
 import { saveFavoriteSelection } from "@/lib/albums";
+import { checkRateLimit, getSafeErrorMessage } from "@/lib/rate-limit";
 
 const payloadSchema = z.object({
   sessionId: z.string().min(8),
@@ -13,6 +14,13 @@ const payloadSchema = z.object({
 
 export async function POST(request: Request, { params }: { params: Promise<{ slug: string }> }) {
   try {
+    const rateLimitResponse = checkRateLimit(request, {
+      label: "favorites-submit",
+      maxRequests: 12,
+      windowMs: 60 * 1000
+    });
+    if (rateLimitResponse) return rateLimitResponse;
+
     const { slug } = await params;
     const payload = payloadSchema.parse(await request.json());
     const result = await saveFavoriteSelection({
@@ -30,7 +38,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
 
     return NextResponse.json({ ok: true, selectionId: result.id, albumTitle: result.albumTitle, serials: result.serials });
   } catch (error) {
-    const message = error instanceof Error ? error.message : "No se pudo enviar la seleccion.";
+    const message = getSafeErrorMessage("No se pudo enviar la seleccion.", error);
     return NextResponse.json({ ok: false, error: message }, { status: 400 });
   }
 }

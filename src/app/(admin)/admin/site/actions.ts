@@ -25,12 +25,20 @@ const siteSettingsSchema = z.object({
     .min(8, "Agrega un numero de WhatsApp valido.")
     .regex(/^\d+$/, "Usa solo numeros en el telefono de WhatsApp."),
   whatsappMessage: z.string().trim().min(12, "Agrega un mensaje de WhatsApp mas claro."),
+  maintenanceTitle: z.string().trim().min(10, "Agrega un titulo mas claro para mantenimiento."),
+  maintenanceMessage: z.string().trim().min(20, "Agrega un mensaje mas claro para mantenimiento."),
   downloadPopupTitle: z.string().trim().min(8, "Agrega un titulo mas descriptivo para el popup."),
   downloadPopupBody: z.string().trim().min(16, "Agrega un mensaje mas claro para el popup."),
   homeBadge: z.string().trim().min(4, "Agrega un texto corto para la insignia de la home."),
   homeEyebrow: z.string().trim().min(4, "Agrega un texto superior para la home."),
   homeTitle: z.string().trim().min(12, "Agrega un titulo principal mas descriptivo."),
-  homeDescription: z.string().trim().min(20, "Agrega una descripcion principal mas completa.")
+  homeDescription: z.string().trim().min(20, "Agrega una descripcion principal mas completa."),
+  featuredAlbumIds: z.array(z.string().trim()).default([]),
+  maintenanceMode: z.boolean(),
+  showWhatsAppFloat: z.boolean(),
+  downloadsEnabled: z.boolean(),
+  favoritesEnabled: z.boolean(),
+  downloadPopupEnabled: z.boolean()
 });
 
 export async function saveSiteSettingsAction(formData: FormData) {
@@ -44,12 +52,23 @@ export async function saveSiteSettingsAction(formData: FormData) {
     facebookUrl: String(formData.get("facebookUrl") ?? ""),
     whatsappNumber: String(formData.get("whatsappNumber") ?? ""),
     whatsappMessage: String(formData.get("whatsappMessage") ?? ""),
+    maintenanceTitle: String(formData.get("maintenanceTitle") ?? ""),
+    maintenanceMessage: String(formData.get("maintenanceMessage") ?? ""),
     downloadPopupTitle: String(formData.get("downloadPopupTitle") ?? ""),
     downloadPopupBody: String(formData.get("downloadPopupBody") ?? ""),
     homeBadge: String(formData.get("homeBadge") ?? ""),
     homeEyebrow: String(formData.get("homeEyebrow") ?? ""),
     homeTitle: String(formData.get("homeTitle") ?? ""),
-    homeDescription: String(formData.get("homeDescription") ?? "")
+    homeDescription: String(formData.get("homeDescription") ?? ""),
+    featuredAlbumIds: formData
+      .getAll("featuredAlbumIds")
+      .map((value) => String(value).trim())
+      .filter(Boolean),
+    maintenanceMode: formData.get("maintenanceMode") === "on",
+    showWhatsAppFloat: formData.get("showWhatsAppFloat") === "on",
+    downloadsEnabled: formData.get("downloadsEnabled") === "on",
+    favoritesEnabled: formData.get("favoritesEnabled") === "on",
+    downloadPopupEnabled: formData.get("downloadPopupEnabled") === "on"
   });
 
   if (!parsedInput.success) {
@@ -65,6 +84,14 @@ export async function saveSiteSettingsAction(formData: FormData) {
     facebookUrl: parsedInput.data.facebookUrl,
     whatsappNumber: parsedInput.data.whatsappNumber,
     whatsappMessage: parsedInput.data.whatsappMessage,
+    maintenanceMode: parsedInput.data.maintenanceMode,
+    maintenanceTitle: parsedInput.data.maintenanceTitle,
+    maintenanceMessage: parsedInput.data.maintenanceMessage,
+    showWhatsAppFloat: parsedInput.data.showWhatsAppFloat,
+    downloadsEnabled: parsedInput.data.downloadsEnabled,
+    favoritesEnabled: parsedInput.data.favoritesEnabled,
+    downloadPopupEnabled: parsedInput.data.downloadPopupEnabled,
+    featuredAlbumIds: parsedInput.data.featuredAlbumIds,
     downloadPopupTitle: parsedInput.data.downloadPopupTitle,
     downloadPopupBody: parsedInput.data.downloadPopupBody,
     homeBadge: parsedInput.data.homeBadge,

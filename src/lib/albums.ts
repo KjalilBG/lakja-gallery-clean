@@ -224,7 +224,7 @@ export async function getAdminAlbums(): Promise<AlbumSummary[]> {
       _count: {
         select: {
           photos: true,
-          favorites: true,
+          favoriteSelections: true,
           downloads: true,
           views: true
         }
@@ -243,7 +243,7 @@ export async function getAdminAlbums(): Promise<AlbumSummary[]> {
     coverFocusY: album.coverFocusY,
     status: mapStatus(album.status),
     photoCount: album._count.photos,
-    favorites: album._count.favorites,
+    favorites: album._count.favoriteSelections,
     downloads: album._count.downloads,
     views: album._count.views,
     eventDate: album.eventDate ? album.eventDate.toISOString() : album.createdAt.toISOString(),
@@ -265,7 +265,7 @@ export async function getPublishedAlbums(limit = 6): Promise<AlbumSummary[]> {
       _count: {
         select: {
           photos: true,
-          favorites: true,
+          favoriteSelections: true,
           downloads: true,
           views: true
         }
@@ -284,7 +284,7 @@ export async function getPublishedAlbums(limit = 6): Promise<AlbumSummary[]> {
     coverFocusY: album.coverFocusY,
     status: mapStatus(album.status),
     photoCount: album._count.photos,
-    favorites: album._count.favorites,
+    favorites: album._count.favoriteSelections,
     downloads: album._count.downloads,
     views: album._count.views,
     eventDate: album.eventDate ? album.eventDate.toISOString() : album.createdAt.toISOString(),
@@ -294,6 +294,60 @@ export async function getPublishedAlbums(limit = 6): Promise<AlbumSummary[]> {
       allowFullDownload: album.allowFullDownload
     }
   }));
+}
+
+export async function getHomepageAlbums(limit = 6, featuredAlbumIds: string[] = []): Promise<AlbumSummary[]> {
+  const featuredIds = Array.from(new Set(featuredAlbumIds.filter(Boolean)));
+
+  if (featuredIds.length === 0) {
+    return getPublishedAlbums(limit);
+  }
+
+  const albums = await prisma.album.findMany({
+    where: { status: AlbumStatus.PUBLISHED },
+    orderBy: [{ eventDate: "desc" }, { createdAt: "desc" }],
+    include: {
+      coverPhoto: true,
+      _count: {
+        select: {
+          photos: true,
+          favoriteSelections: true,
+          downloads: true,
+          views: true
+        }
+      }
+    }
+  });
+
+  const mappedAlbums = albums.map((album) => ({
+    id: album.id,
+    slug: album.slug,
+    title: album.title,
+    clientName: album.clientName,
+    coverUrl: album.coverPhoto ? buildPhotoUrl(album.coverPhoto) : defaultCoverUrl(),
+    coverPosition: mapCoverPosition(album.coverPosition),
+    coverFocusX: album.coverFocusX,
+    coverFocusY: album.coverFocusY,
+    status: mapStatus(album.status),
+    photoCount: album._count.photos,
+    favorites: album._count.favoriteSelections,
+    downloads: album._count.downloads,
+    views: album._count.views,
+    eventDate: album.eventDate ? album.eventDate.toISOString() : album.createdAt.toISOString(),
+    permissions: {
+      allowSingleDownload: album.allowSingleDownload,
+      allowFavoritesDownload: album.allowFavoritesDownload,
+      allowFullDownload: album.allowFullDownload
+    }
+  }));
+
+  const featuredAlbums = featuredIds
+    .map((featuredId) => mappedAlbums.find((album) => album.id === featuredId))
+    .filter((album): album is AlbumSummary => Boolean(album));
+
+  const remainingAlbums = mappedAlbums.filter((album) => !featuredIds.includes(album.id));
+
+  return [...featuredAlbums, ...remainingAlbums].slice(0, limit);
 }
 
 export async function getPublishedShowcasePhotos(limit = 10) {
@@ -344,7 +398,7 @@ export async function getAdminStats() {
   const [totalAlbums, publishedAlbums, totalFavorites, totalViews] = await Promise.all([
     prisma.album.count(),
     prisma.album.count({ where: { status: AlbumStatus.PUBLISHED } }),
-    prisma.favorite.count(),
+    prisma.favoriteSelectionItem.count(),
     prisma.albumView.count()
   ]);
 
@@ -367,7 +421,10 @@ export async function getAdminAlbumById(id: string): Promise<AlbumDetail | null>
       },
       _count: {
         select: {
-          photos: true
+          photos: true,
+          views: true,
+          downloads: true,
+          favoriteSelections: true
         }
       },
       favoriteSelections: {
@@ -412,6 +469,10 @@ export async function getAdminAlbumById(id: string): Promise<AlbumDetail | null>
     coverFocusX: album.coverFocusX,
     coverFocusY: album.coverFocusY,
     photoCount: album._count.photos,
+    views: album._count.views,
+    downloads: album._count.downloads,
+    favoriteSelectionsCount: album._count.favoriteSelections,
+    favoritePhotosCount: album.favoriteSelections.reduce((count, selection) => count + selection.items.length, 0),
     permissions: {
       allowSingleDownload: album.allowSingleDownload,
       allowFavoritesDownload: album.allowFavoritesDownload,
@@ -428,6 +489,8 @@ export async function getAdminAlbumById(id: string): Promise<AlbumDetail | null>
       photos: selection.items.map((item) => ({
         id: item.photo.id,
         title: item.photo.filename,
+        platformName: buildPublicPhotoTitle(album.title, item.photo.sortOrder),
+        originalName: item.photo.filename,
         thumbUrl: item.photo.thumbKey ? toMediaRoute(item.photo.thumbKey) : buildPhotoUrl(item.photo),
         serial: item.photo.sortOrder + 1
       }))
@@ -543,6 +606,112 @@ export async function saveFavoriteSelection(input: {
     id: selection.id,
     albumTitle: album.title,
     serials: selection.items.map((item) => item.photo.sortOrder + 1)
+  };
+}
+
+export async function recordAlbumView(slug: string, sessionId: string) {
+  const album = await prisma.album.findUnique({
+    where: { slug },
+    select: { id: true }
+  });
+
+  if (!album) {
+    return null;
+  }
+
+  return prisma.albumView.create({
+    data: {
+      albumId: album.id,
+      sessionId
+    }
+  });
+}
+
+export async function recordAlbumDownload(input: {
+  slug: string;
+  sessionId: string;
+  type: "SINGLE" | "FAVORITES_ZIP" | "FULL_ZIP";
+  photoId?: string | null;
+}) {
+  const album = await prisma.album.findUnique({
+    where: { slug: input.slug },
+    select: {
+      id: true,
+      photos: input.photoId
+        ? {
+            where: { id: input.photoId },
+            select: { id: true }
+          }
+        : false
+    }
+  });
+
+  if (!album) {
+    return null;
+  }
+
+  const photoId = input.photoId && Array.isArray(album.photos) && album.photos[0] ? album.photos[0].id : null;
+
+  return prisma.download.create({
+    data: {
+      albumId: album.id,
+      sessionId: input.sessionId,
+      type: input.type,
+      photoId
+    }
+  });
+}
+
+export async function getFavoriteSelectionExport(selectionId: string, albumId: string) {
+  const selection = await prisma.favoriteSelection.findUnique({
+    where: { id: selectionId },
+    include: {
+      album: {
+        select: {
+          id: true,
+          title: true,
+          slug: true
+        }
+      },
+      items: {
+        orderBy: { sortOrder: "asc" },
+        include: {
+          photo: {
+            select: {
+              id: true,
+              filename: true,
+              sortOrder: true,
+              originalKey: true,
+              previewKey: true,
+              thumbKey: true
+            }
+          }
+        }
+      }
+    }
+  });
+
+  if (!selection || selection.albumId !== albumId) {
+    return null;
+  }
+
+  return {
+    id: selection.id,
+    albumTitle: selection.album.title,
+    albumSlug: selection.album.slug,
+    clientName: selection.clientName,
+    message: selection.message,
+    whatsapp: selection.whatsapp,
+    createdAt: selection.createdAt,
+    photos: selection.items.map((item) => ({
+      id: item.photo.id,
+      serial: item.photo.sortOrder + 1,
+      platformName: buildPublicPhotoTitle(selection.album.title, item.photo.sortOrder),
+      originalName: item.photo.filename,
+      originalKey: item.photo.originalKey,
+      previewKey: item.photo.previewKey,
+      thumbKey: item.photo.thumbKey
+    }))
   };
 }
 
@@ -1020,6 +1189,7 @@ export async function getDownloadableAlbumPhotos(slug: string) {
     where: { slug },
     select: {
       title: true,
+      allowSingleDownload: true,
       allowFavoritesDownload: true,
       allowFullDownload: true,
       photos: {

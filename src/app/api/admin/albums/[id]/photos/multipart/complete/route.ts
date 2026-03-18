@@ -4,7 +4,9 @@ import { z } from "zod";
 
 import { saveAlbumPhotoFromStorage } from "@/lib/albums";
 import { ensureAdminApiRequest } from "@/lib/auth-guard";
+import { checkRateLimit, getSafeErrorMessage } from "@/lib/rate-limit";
 import { isR2Configured, readFromR2, removeFromR2, uploadToR2 } from "@/lib/r2";
+import { assertValidImageUpload } from "@/lib/upload-security";
 
 export const maxDuration = 60;
 
@@ -29,18 +31,34 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   const unauthorizedResponse = await ensureAdminApiRequest();
   if (unauthorizedResponse) return unauthorizedResponse;
 
+  const rateLimitResponse = checkRateLimit(request, {
+    label: "admin-upload-multipart-complete",
+    maxRequests: 60,
+    windowMs: 60 * 1000
+  });
+  if (rateLimitResponse) return rateLimitResponse;
+
   if (!isR2Configured()) {
     return NextResponse.json({ ok: false, error: "R2 no esta configurado." }, { status: 501 });
   }
 
-  const { id } = await params;
-  const body = completeSchema.parse(await request.json());
-
-  if (body.albumId !== id) {
-    return NextResponse.json({ ok: false, error: "Album invalido." }, { status: 400 });
-  }
+  let parsedBody: z.infer<typeof completeSchema> | null = null;
 
   try {
+    const { id } = await params;
+    const body = completeSchema.parse(await request.json());
+    parsedBody = body;
+
+    if (body.albumId !== id) {
+      return NextResponse.json({ ok: false, error: "Album invalido." }, { status: 400 });
+    }
+
+    assertValidImageUpload({
+      fileName: body.fileName,
+      contentType: body.contentType,
+      sizeBytes: body.sizeBytes
+    });
+
     const chunkBuffers = await Promise.all(
       body.parts
         .slice()
@@ -52,6 +70,10 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     );
 
     const originalBuffer = Buffer.concat(chunkBuffers);
+
+    if (originalBuffer.byteLength !== body.sizeBytes) {
+      throw new Error("El archivo ensamblado no coincide con el tamano esperado.");
+    }
 
     await uploadToR2({
       bucket: "originals",
@@ -70,18 +92,20 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     });
 
     await Promise.all(body.parts.map((part) => removeFromR2(part.chunkKey).catch(() => undefined)));
+
+    revalidatePath(`/admin/albums/${body.albumId}`);
+    revalidatePath("/admin/albums");
+    revalidatePath("/admin");
+
+    return NextResponse.json({ ok: true });
   } catch (error) {
-    await Promise.all(body.parts.map((part) => removeFromR2(part.chunkKey).catch(() => undefined)));
+    if (parsedBody) {
+      await Promise.all(parsedBody.parts.map((part) => removeFromR2(part.chunkKey).catch(() => undefined)));
+    }
 
     return NextResponse.json(
-      { ok: false, error: error instanceof Error ? error.message : "No se pudo completar la foto." },
-      { status: 500 }
+      { ok: false, error: getSafeErrorMessage("No se pudo completar la foto.", error) },
+      { status: 400 }
     );
   }
-
-  revalidatePath(`/admin/albums/${body.albumId}`);
-  revalidatePath("/admin/albums");
-  revalidatePath("/admin");
-
-  return NextResponse.json({ ok: true });
 }

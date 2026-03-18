@@ -219,7 +219,8 @@ async function uploadSinglePhotoMultipart(params: {
     body: JSON.stringify({
       albumId,
       fileName: item.file.name,
-      contentType: item.file.type
+      contentType: item.file.type,
+      sizeBytes: item.file.size
     })
   });
 

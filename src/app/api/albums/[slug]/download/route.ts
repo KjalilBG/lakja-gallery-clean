@@ -3,7 +3,8 @@ import path from "node:path";
 import JSZip from "jszip";
 import { NextRequest, NextResponse } from "next/server";
 
-import { getDownloadableAlbumPhotos, readPhotoBinary } from "@/lib/albums";
+import { getDownloadableAlbumPhotos, readPhotoBinary, recordAlbumDownload } from "@/lib/albums";
+import { checkRateLimit, getSafeErrorMessage } from "@/lib/rate-limit";
 
 type RouteContext = {
   params: Promise<{ slug: string }>;
@@ -20,49 +21,110 @@ function cleanZipName(input: string) {
 }
 
 export async function GET(request: NextRequest, context: RouteContext) {
-  const { slug } = await context.params;
-  const album = await getDownloadableAlbumPhotos(slug);
-
-  if (!album) {
-    return NextResponse.json({ error: "Album no encontrado." }, { status: 404 });
-  }
-
-  const type = request.nextUrl.searchParams.get("type");
-  const favoritesParam = request.nextUrl.searchParams.get("favorites");
-  const favoriteIds = favoritesParam?.split(",").filter(Boolean) ?? [];
-
-  if (type === "favorites" && !album.allowFavoritesDownload) {
-    return NextResponse.json({ error: "La descarga de favoritas no esta habilitada." }, { status: 403 });
-  }
-
-  if (type === "all" && !album.allowFullDownload) {
-    return NextResponse.json({ error: "La descarga completa no esta habilitada." }, { status: 403 });
-  }
-
-  const selectedPhotos =
-    type === "favorites" ? album.photos.filter((photo) => favoriteIds.includes(photo.id)) : album.photos;
-
-  if (selectedPhotos.length === 0) {
-    return NextResponse.json({ error: "No hay fotos para descargar." }, { status: 400 });
-  }
-
-  const zip = new JSZip();
-
-  for (const [index, photo] of selectedPhotos.entries()) {
-    const fileBuffer = await readPhotoBinary(photo.originalKey);
-    const extension = path.extname(photo.filename) || ".jpg";
-    const albumBasedName = `${index + 1} - ${album.title}${extension}`;
-
-    zip.file(albumBasedName, fileBuffer.body);
-  }
-
-  const zipBuffer = await zip.generateAsync({ type: "nodebuffer" });
-  const zipName = `${cleanZipName(album.title)}-${type === "favorites" ? "favoritas" : "album"}.zip`;
-
-  return new NextResponse(new Uint8Array(zipBuffer), {
-    headers: {
-      "Content-Type": "application/zip",
-      "Content-Disposition": `attachment; filename="${zipName}"`
-    }
+  const rateLimitResponse = checkRateLimit(request, {
+    label: "album-download",
+    maxRequests: 8,
+    windowMs: 60 * 1000
   });
+  if (rateLimitResponse) return rateLimitResponse;
+
+  try {
+    const { slug } = await context.params;
+    const album = await getDownloadableAlbumPhotos(slug);
+
+    if (!album) {
+      return NextResponse.json({ error: "Album no encontrado." }, { status: 404 });
+    }
+
+    const type = request.nextUrl.searchParams.get("type");
+    const favoritesParam = request.nextUrl.searchParams.get("favorites");
+    const photoId = request.nextUrl.searchParams.get("photoId");
+    const sessionId = request.nextUrl.searchParams.get("sessionId")?.trim();
+    const favoriteIds = favoritesParam?.split(",").filter(Boolean) ?? [];
+
+    if (type === "favorites" && !album.allowFavoritesDownload) {
+      return NextResponse.json({ error: "La descarga de favoritas no esta habilitada." }, { status: 403 });
+    }
+
+    if (type === "all" && !album.allowFullDownload) {
+      return NextResponse.json({ error: "La descarga completa no esta habilitada." }, { status: 403 });
+    }
+
+    if (type === "single") {
+      if (!album.allowSingleDownload) {
+        return NextResponse.json({ error: "La descarga individual no esta habilitada." }, { status: 403 });
+      }
+
+      if (!photoId) {
+        return NextResponse.json({ error: "No se encontro la foto solicitada." }, { status: 400 });
+      }
+
+      const photo = album.photos.find((item) => item.id === photoId);
+
+      if (!photo) {
+        return NextResponse.json({ error: "No se encontro la foto solicitada." }, { status: 404 });
+      }
+
+      const file = await readPhotoBinary(photo.originalKey);
+      const extension = path.extname(photo.filename) || ".jpg";
+      const downloadName = `${buildDownloadPhotoName(album.title, photo.sortOrder)}${extension}`;
+
+      if (sessionId) {
+        await recordAlbumDownload({
+          slug,
+          sessionId,
+          type: "SINGLE",
+          photoId: photo.id
+        });
+      }
+
+      return new NextResponse(new Uint8Array(file.body), {
+        headers: {
+          "Content-Type": file.contentType,
+          "Content-Disposition": `attachment; filename="${downloadName}"`
+        }
+      });
+    }
+
+    const selectedPhotos =
+      type === "favorites" ? album.photos.filter((photo) => favoriteIds.includes(photo.id)) : album.photos;
+
+    if (selectedPhotos.length === 0) {
+      return NextResponse.json({ error: "No hay fotos para descargar." }, { status: 400 });
+    }
+
+    const zip = new JSZip();
+
+    for (const [index, photo] of selectedPhotos.entries()) {
+      const fileBuffer = await readPhotoBinary(photo.originalKey);
+      const extension = path.extname(photo.filename) || ".jpg";
+      const albumBasedName = `${index + 1} - ${album.title}${extension}`;
+
+      zip.file(albumBasedName, fileBuffer.body);
+    }
+
+    const zipBuffer = await zip.generateAsync({ type: "nodebuffer" });
+    const zipName = `${cleanZipName(album.title)}-${type === "favorites" ? "favoritas" : "album"}.zip`;
+
+    if (sessionId) {
+      await recordAlbumDownload({
+        slug,
+        sessionId,
+        type: type === "favorites" ? "FAVORITES_ZIP" : "FULL_ZIP"
+      });
+    }
+
+    return new NextResponse(new Uint8Array(zipBuffer), {
+      headers: {
+        "Content-Type": "application/zip",
+        "Content-Disposition": `attachment; filename="${zipName}"`
+      }
+    });
+  } catch (error) {
+    return NextResponse.json({ error: getSafeErrorMessage("No se pudo preparar la descarga.", error) }, { status: 500 });
+  }
+}
+
+function buildDownloadPhotoName(albumTitle: string, sortOrder: number) {
+  return `${sortOrder + 1} - ${albumTitle}`;
 }

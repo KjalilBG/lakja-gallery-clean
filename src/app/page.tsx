@@ -3,17 +3,28 @@ import { ArrowRight, Facebook, Instagram, Sparkles } from "lucide-react";
 
 import { AlbumCard } from "@/components/dashboard/album-card";
 import { HomeShowcaseReel } from "@/components/home/home-showcase-reel";
-import { getPublishedAlbums, getPublishedShowcasePhotos } from "@/lib/albums";
+import { SiteMaintenanceState } from "@/components/site/site-maintenance-state";
+import { getHomepageAlbums, getPublishedShowcasePhotos } from "@/lib/albums";
 import { getSiteSettings } from "@/lib/site-settings";
 
 export const dynamic = "force-dynamic";
 
 export default async function HomePage() {
-  const [albums, showcasePhotos, settings] = await Promise.all([
-    getPublishedAlbums(6),
-    getPublishedShowcasePhotos(10),
-    getSiteSettings()
+  const settings = await getSiteSettings();
+  const [albums, showcasePhotos] = await Promise.all([
+    getHomepageAlbums(6, settings.featuredAlbumIds),
+    getPublishedShowcasePhotos(10)
   ]);
+
+  if (settings.maintenanceMode) {
+    return (
+      <SiteMaintenanceState
+        title={settings.maintenanceTitle}
+        message={settings.maintenanceMessage}
+        whatsappNumber={settings.whatsappNumber}
+      />
+    );
+  }
 
   return (
     <div className="space-y-14 pb-8 pt-6 md:space-y-16 md:pt-10">

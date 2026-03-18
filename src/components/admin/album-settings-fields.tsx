@@ -1,7 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { AlbumVisibility, CoverPosition } from "@prisma/client";
+import { MoveHorizontal, MoveVertical } from "lucide-react";
 
 import { getObjectPositionFromFocus } from "@/lib/cover";
 
@@ -28,10 +29,23 @@ export function AlbumSettingsFields({
   );
   const [focusX, setFocusX] = useState(coverFocusX);
   const [focusY, setFocusY] = useState(coverFocusY);
+  const editorRef = useRef<HTMLDivElement | null>(null);
+  const objectPosition = useMemo(() => getObjectPositionFromFocus(focusX, focusY), [focusX, focusY]);
+
+  function handleEditorPointer(clientX: number, clientY: number) {
+    if (!editorRef.current) return;
+
+    const rect = editorRef.current.getBoundingClientRect();
+    const nextX = Math.max(0, Math.min(100, Math.round(((clientX - rect.left) / rect.width) * 100)));
+    const nextY = Math.max(0, Math.min(100, Math.round(((clientY - rect.top) / rect.height) * 100)));
+
+    setFocusX(nextX);
+    setFocusY(nextY);
+  }
 
   return (
     <>
-      <div className="grid gap-5 md:grid-cols-3">
+      <div className="grid gap-5 md:grid-cols-2">
         <label className="space-y-2">
           <span className="text-sm font-bold text-slate-500">Visibilidad</span>
           <select
@@ -58,51 +72,86 @@ export function AlbumSettingsFields({
             <option value={CoverPosition.BOTTOM}>Abajo</option>
           </select>
         </label>
-
-        <div className="rounded-[24px] border border-slate-200 bg-slate-50 p-3">
-          <div className="overflow-hidden rounded-[18px] bg-white">
-            <img
-              src={coverUrl}
-              alt="Vista previa de portada"
-              className="h-28 w-full object-cover"
-              style={{ objectPosition: getObjectPositionFromFocus(focusX, focusY) }}
-            />
-          </div>
-        </div>
       </div>
 
-      <div className="grid gap-4 rounded-[24px] border border-slate-200 bg-slate-50 p-5 md:grid-cols-2">
-        <label className="space-y-3">
-          <div className="flex items-center justify-between gap-3">
-            <span className="text-sm font-bold text-slate-500">Encuadre horizontal</span>
-            <span className="text-sm font-black text-slate-900">{focusX}%</span>
-          </div>
-          <input
-            name="coverFocusX"
-            type="range"
-            min="0"
-            max="100"
-            value={focusX}
-            onChange={(event) => setFocusX(Number(event.target.value))}
-            className="w-full accent-lime-500"
-          />
-        </label>
+      <input type="hidden" name="coverFocusX" value={focusX} />
+      <input type="hidden" name="coverFocusY" value={focusY} />
 
-        <label className="space-y-3">
-          <div className="flex items-center justify-between gap-3">
-            <span className="text-sm font-bold text-slate-500">Encuadre vertical</span>
-            <span className="text-sm font-black text-slate-900">{focusY}%</span>
+      <div className="space-y-5 rounded-[28px] border border-slate-200 bg-slate-50 p-5">
+        <div>
+          <p className="text-sm font-black text-slate-900">Editor de portada</p>
+            <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-500">
+              Haz click sobre la imagen para mover el enfoque. La vista inferior replica la franja principal del album para que ajustes la portada con una referencia mucho mas fiel.
+            </p>
           </div>
-          <input
-            name="coverFocusY"
-            type="range"
-            min="0"
-            max="100"
-            value={focusY}
-            onChange={(event) => setFocusY(Number(event.target.value))}
-            className="w-full accent-fuchsia-500"
-          />
-        </label>
+
+        <div className="space-y-5">
+          <div
+            ref={editorRef}
+            onClick={(event) => handleEditorPointer(event.clientX, event.clientY)}
+            className="relative h-[280px] cursor-crosshair overflow-hidden rounded-[24px] border border-slate-200 bg-white shadow-[0_12px_26px_rgba(15,23,42,0.06)]"
+          >
+            <img src={coverUrl} alt="Editor de portada" className="h-full w-full object-cover" style={{ objectPosition }} />
+            <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(to_right,rgba(255,255,255,0.16)_1px,transparent_1px),linear-gradient(to_bottom,rgba(255,255,255,0.16)_1px,transparent_1px)] bg-[size:25%_25%]" />
+            <div
+              className="pointer-events-none absolute h-7 w-7 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-white bg-white/20 shadow-[0_0_0_5px_rgba(15,23,42,0.14)]"
+              style={{ left: `${focusX}%`, top: `${focusY}%` }}
+            />
+          </div>
+
+          <div className="grid gap-4 md:grid-cols-2">
+            <label className="space-y-3">
+              <div className="flex items-center justify-between gap-3">
+                <span className="inline-flex items-center gap-2 text-sm font-bold text-slate-500">
+                  <MoveHorizontal className="size-4" />
+                  Encuadre horizontal
+                </span>
+                <span className="text-sm font-black text-slate-900">{focusX}%</span>
+              </div>
+              <input
+                type="range"
+                min="0"
+                max="100"
+                value={focusX}
+                onChange={(event) => setFocusX(Number(event.target.value))}
+                className="w-full accent-lime-500"
+              />
+            </label>
+
+            <label className="space-y-3">
+              <div className="flex items-center justify-between gap-3">
+                <span className="inline-flex items-center gap-2 text-sm font-bold text-slate-500">
+                  <MoveVertical className="size-4" />
+                  Encuadre vertical
+                </span>
+                <span className="text-sm font-black text-slate-900">{focusY}%</span>
+              </div>
+              <input
+                type="range"
+                min="0"
+                max="100"
+                value={focusY}
+                onChange={(event) => setFocusY(Number(event.target.value))}
+                className="w-full accent-fuchsia-500"
+              />
+            </label>
+          </div>
+
+          <div className="rounded-[24px] border border-slate-200 bg-white p-4 shadow-[0_12px_26px_rgba(15,23,42,0.06)]">
+            <div className="mb-3 text-[11px] font-extrabold uppercase tracking-[0.18em] text-slate-400">Franja extra ancha</div>
+            <div className="rounded-[22px] border border-slate-200 bg-[#fcfcfb] p-3">
+              <div className="overflow-hidden rounded-[28px] border border-slate-200 bg-white p-3 shadow-[0_12px_26px_rgba(15,23,42,0.06)]">
+                <img
+                  src={coverUrl}
+                  alt="Vista super horizontal"
+                  className="h-28 w-full rounded-[24px] object-cover sm:h-36 lg:h-44"
+                  style={{ objectPosition }}
+                />
+              </div>
+            </div>
+          </div>
+        </div>
+
       </div>
 
       {visibility === AlbumVisibility.PASSWORD ? (

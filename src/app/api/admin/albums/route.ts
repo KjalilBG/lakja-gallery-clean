@@ -5,6 +5,7 @@ import { z } from "zod";
 import { createAlbum } from "@/lib/albums";
 import { ensureAdminApiRequest } from "@/lib/auth-guard";
 import { hashPassword } from "@/lib/password";
+import { checkRateLimit, getSafeErrorMessage } from "@/lib/rate-limit";
 
 const createAlbumSchema = z.object({
   title: z.string().trim().min(3, "Agrega un nombre para el album."),
@@ -26,24 +27,35 @@ export async function POST(request: Request) {
   const unauthorizedResponse = await ensureAdminApiRequest();
   if (unauthorizedResponse) return unauthorizedResponse;
 
-  const body = await request.json();
-  const parsed = createAlbumSchema.parse(body);
+  const rateLimitResponse = checkRateLimit(request, {
+    label: "admin-create-album",
+    maxRequests: 20,
+    windowMs: 60 * 1000
+  });
+  if (rateLimitResponse) return rateLimitResponse;
 
-  if (parsed.visibility === AlbumVisibility.PASSWORD && (!parsed.password || parsed.password.length < 4)) {
-    return NextResponse.json(
-      { ok: false, error: "La contrasena del album debe tener al menos 4 caracteres." },
-      { status: 400 }
-    );
+  try {
+    const body = await request.json();
+    const parsed = createAlbumSchema.parse(body);
+
+    if (parsed.visibility === AlbumVisibility.PASSWORD && (!parsed.password || parsed.password.length < 4)) {
+      return NextResponse.json(
+        { ok: false, error: "La contrasena del album debe tener al menos 4 caracteres." },
+        { status: 400 }
+      );
+    }
+
+    const album = await createAlbum({
+      ...parsed,
+      passwordHash: parsed.visibility === AlbumVisibility.PASSWORD && parsed.password ? hashPassword(parsed.password) : null
+    });
+
+    return NextResponse.json({
+      ok: true,
+      albumId: album.id,
+      slug: album.slug
+    });
+  } catch (error) {
+    return NextResponse.json({ ok: false, error: getSafeErrorMessage("No se pudo crear el album.", error) }, { status: 400 });
   }
-
-  const album = await createAlbum({
-    ...parsed,
-    passwordHash: parsed.visibility === AlbumVisibility.PASSWORD && parsed.password ? hashPassword(parsed.password) : null
-  });
-
-  return NextResponse.json({
-    ok: true,
-    albumId: album.id,
-    slug: album.slug
-  });
 }

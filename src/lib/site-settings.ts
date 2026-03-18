@@ -9,6 +9,14 @@ export type SiteSettingsRecord = {
   facebookUrl: string;
   whatsappNumber: string;
   whatsappMessage: string;
+  maintenanceMode: boolean;
+  maintenanceTitle: string;
+  maintenanceMessage: string;
+  showWhatsAppFloat: boolean;
+  downloadsEnabled: boolean;
+  favoritesEnabled: boolean;
+  downloadPopupEnabled: boolean;
+  featuredAlbumIds: string[];
   downloadPopupTitle: string;
   downloadPopupBody: string;
   homeBadge: string;
@@ -55,6 +63,14 @@ function getDefaultSiteSettings(): SiteSettingsRecord {
     facebookUrl: siteConfig.facebookUrl,
     whatsappNumber: siteConfig.whatsappNumber,
     whatsappMessage: siteConfig.whatsappMessage,
+    maintenanceMode: siteConfig.maintenanceMode,
+    maintenanceTitle: siteConfig.maintenanceTitle,
+    maintenanceMessage: siteConfig.maintenanceMessage,
+    showWhatsAppFloat: siteConfig.showWhatsAppFloat,
+    downloadsEnabled: siteConfig.downloadsEnabled,
+    favoritesEnabled: siteConfig.favoritesEnabled,
+    downloadPopupEnabled: siteConfig.downloadPopupEnabled,
+    featuredAlbumIds: [...siteConfig.featuredAlbumIds],
     downloadPopupTitle: siteConfig.downloadPopupTitle,
     downloadPopupBody: siteConfig.downloadPopupBody,
     homeBadge: siteConfig.homeBadge,
@@ -76,6 +92,14 @@ export async function getSiteSettings(): Promise<SiteSettingsRecord> {
       facebookUrl: true,
       whatsappNumber: true,
       whatsappMessage: true,
+      maintenanceMode: true,
+      maintenanceTitle: true,
+      maintenanceMessage: true,
+      showWhatsAppFloat: true,
+      downloadsEnabled: true,
+      favoritesEnabled: true,
+      downloadPopupEnabled: true,
+      featuredAlbumIds: true,
       downloadPopupTitle: true,
       downloadPopupBody: true,
       homeBadge: true,
@@ -97,6 +121,14 @@ export async function getSiteSettings(): Promise<SiteSettingsRecord> {
     facebookUrl: normalizeRequiredText(settings.facebookUrl, defaults.facebookUrl),
     whatsappNumber: normalizeRequiredText(settings.whatsappNumber, defaults.whatsappNumber),
     whatsappMessage: normalizeRequiredText(settings.whatsappMessage, defaults.whatsappMessage),
+    maintenanceMode: settings.maintenanceMode,
+    maintenanceTitle: normalizeRequiredText(settings.maintenanceTitle, defaults.maintenanceTitle),
+    maintenanceMessage: normalizeRequiredText(settings.maintenanceMessage, defaults.maintenanceMessage),
+    showWhatsAppFloat: settings.showWhatsAppFloat,
+    downloadsEnabled: settings.downloadsEnabled,
+    favoritesEnabled: settings.favoritesEnabled,
+    downloadPopupEnabled: settings.downloadPopupEnabled,
+    featuredAlbumIds: settings.featuredAlbumIds,
     downloadPopupTitle: normalizeRequiredText(settings.downloadPopupTitle, defaults.downloadPopupTitle),
     downloadPopupBody: normalizeRequiredText(settings.downloadPopupBody, defaults.downloadPopupBody),
     homeBadge: normalizeRequiredText(settings.homeBadge, defaults.homeBadge),
@@ -118,6 +150,14 @@ export async function upsertSiteSettings(input: SiteSettingsRecord) {
       facebookUrl: input.facebookUrl.trim(),
       whatsappNumber: input.whatsappNumber.trim(),
       whatsappMessage: input.whatsappMessage.trim(),
+      maintenanceMode: input.maintenanceMode,
+      maintenanceTitle: input.maintenanceTitle.trim(),
+      maintenanceMessage: input.maintenanceMessage.trim(),
+      showWhatsAppFloat: input.showWhatsAppFloat,
+      downloadsEnabled: input.downloadsEnabled,
+      favoritesEnabled: input.favoritesEnabled,
+      downloadPopupEnabled: input.downloadPopupEnabled,
+      featuredAlbumIds: input.featuredAlbumIds,
       downloadPopupTitle: input.downloadPopupTitle.trim(),
       downloadPopupBody: input.downloadPopupBody.trim(),
       homeBadge: input.homeBadge.trim(),
@@ -133,6 +173,14 @@ export async function upsertSiteSettings(input: SiteSettingsRecord) {
       facebookUrl: input.facebookUrl.trim(),
       whatsappNumber: input.whatsappNumber.trim(),
       whatsappMessage: input.whatsappMessage.trim(),
+      maintenanceMode: input.maintenanceMode,
+      maintenanceTitle: input.maintenanceTitle.trim(),
+      maintenanceMessage: input.maintenanceMessage.trim(),
+      showWhatsAppFloat: input.showWhatsAppFloat,
+      downloadsEnabled: input.downloadsEnabled,
+      favoritesEnabled: input.favoritesEnabled,
+      downloadPopupEnabled: input.downloadPopupEnabled,
+      featuredAlbumIds: input.featuredAlbumIds,
       downloadPopupTitle: input.downloadPopupTitle.trim(),
       downloadPopupBody: input.downloadPopupBody.trim(),
       homeBadge: input.homeBadge.trim(),

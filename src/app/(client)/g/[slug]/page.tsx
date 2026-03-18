@@ -4,6 +4,7 @@ import { notFound } from "next/navigation";
 import { AlbumPasswordGate } from "@/components/gallery/album-password-gate";
 import { GalleryExperience } from "@/components/gallery/gallery-experience";
 import { galleryPhotos } from "@/features/albums/mock-data";
+import { SiteMaintenanceState } from "@/components/site/site-maintenance-state";
 import { getAlbumAccessCookieName, verifyAlbumAccessToken } from "@/lib/album-access";
 import { getObjectPositionFromFocus } from "@/lib/cover";
 import { buildGalleryPhotosFromAlbum, getAlbumBySlug } from "@/lib/albums";
@@ -23,6 +24,16 @@ export default async function GalleryPage({ params, searchParams }: GalleryPageP
   const { slug } = await params;
   const resolvedSearchParams = await searchParams;
   const [album, siteSettings] = await Promise.all([getAlbumBySlug(slug), getSiteSettings()]);
+
+  if (siteSettings.maintenanceMode) {
+    return (
+      <SiteMaintenanceState
+        title={siteSettings.maintenanceTitle}
+        message={siteSettings.maintenanceMessage}
+        whatsappNumber={siteSettings.whatsappNumber}
+      />
+    );
+  }
 
   if (!album && slug !== "editorial-demo") {
     notFound();
@@ -80,8 +91,12 @@ export default async function GalleryPage({ params, searchParams }: GalleryPageP
           slug={slug}
           albumTitle={title}
           storageKey={`lakja-favorites-${slug}`}
-          allowFavoritesDownload={album?.allowFavoritesDownload ?? true}
-          allowFullDownload={album?.allowFullDownload ?? true}
+          allowSingleDownload={siteSettings.downloadsEnabled && (album?.allowSingleDownload ?? true)}
+          allowFavoritesDownload={siteSettings.downloadsEnabled && (album?.allowFavoritesDownload ?? true)}
+          allowFullDownload={siteSettings.downloadsEnabled && (album?.allowFullDownload ?? true)}
+          favoritesEnabled={siteSettings.favoritesEnabled}
+          downloadsEnabled={siteSettings.downloadsEnabled}
+          downloadPopupEnabled={siteSettings.downloadPopupEnabled}
           instagramUrl={siteSettings.instagramUrl}
           facebookUrl={siteSettings.facebookUrl}
           whatsappNumber={siteSettings.whatsappNumber}
