@@ -76,6 +76,16 @@
   }
 }
 
+@keyframes lkj-marquee {
+  from {
+    transform: translateX(0);
+  }
+
+  to {
+    transform: translateX(-50%);
+  }
+}
+
 :root {
   --font-sans: "Manrope", "Segoe UI", sans-serif;
   --font-serif: "DM Serif Display", Georgia, serif;
