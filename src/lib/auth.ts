@@ -62,7 +62,8 @@ export const authOptions: NextAuthOptions = {
       console.log("[auth] signIn attempt", {
         provider: account?.provider,
         email: user.email ?? null,
-        allowedAdminEmails
+        hasAllowlist: allowedAdminEmails.length > 0,
+        allowlistSize: allowedAdminEmails.length
       });
 
       if (account?.provider !== "google") {
@@ -76,7 +77,9 @@ export const authOptions: NextAuthOptions = {
       }
 
       if (allowedAdminEmails.length > 0 && !allowedAdminEmails.includes(user.email.toLowerCase())) {
-        console.log("[auth] blocked email not in allowlist", user.email.toLowerCase());
+        console.log("[auth] blocked email not in allowlist", {
+          email: user.email.toLowerCase()
+        });
         return "/login?error=AccessDenied";
       }
 

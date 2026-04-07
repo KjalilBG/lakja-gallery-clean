@@ -4,6 +4,7 @@ import { z } from "zod";
 import { reserveAlbumPhotoSortOrders } from "@/lib/albums";
 import { ensureAdminApiRequest } from "@/lib/auth-guard";
 import { checkRateLimit, getSafeErrorMessage } from "@/lib/rate-limit";
+import { sanitizeJsonValue } from "@/lib/sanitize";
 
 export const maxDuration = 30;
 
@@ -25,7 +26,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
 
   try {
     const { id } = await params;
-    const body = reserveSchema.parse(await request.json());
+    const body = reserveSchema.parse(sanitizeJsonValue(await request.json()));
 
     if (body.albumId !== id) {
       return NextResponse.json({ ok: false, error: "Album invalido." }, { status: 400 });

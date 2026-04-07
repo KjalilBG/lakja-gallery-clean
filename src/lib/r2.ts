@@ -22,6 +22,10 @@ export const r2Buckets = {
 
 type BucketKind = keyof typeof r2Buckets;
 
+export function isAllowedR2BucketName(bucketName: string) {
+  return Object.values(r2Buckets).includes(bucketName as (typeof r2Buckets)[BucketKind]);
+}
+
 let client: S3Client | null = null;
 
 function getClient() {

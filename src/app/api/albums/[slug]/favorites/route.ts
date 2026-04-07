@@ -3,6 +3,7 @@ import { z } from "zod";
 
 import { saveFavoriteSelection } from "@/lib/albums";
 import { checkRateLimit, getSafeErrorMessage } from "@/lib/rate-limit";
+import { sanitizeJsonValue } from "@/lib/sanitize";
 
 const payloadSchema = z.object({
   sessionId: z.string().min(8),
@@ -22,7 +23,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
     if (rateLimitResponse) return rateLimitResponse;
 
     const { slug } = await params;
-    const payload = payloadSchema.parse(await request.json());
+    const payload = payloadSchema.parse(sanitizeJsonValue(await request.json()));
     const result = await saveFavoriteSelection({
       slug,
       sessionId: payload.sessionId,

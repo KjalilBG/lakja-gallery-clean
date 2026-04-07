@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma";
+import { sanitizeTextInput } from "@/lib/sanitize";
 
 function normalizeOwnerEmail(email: string) {
   return email.trim().toLowerCase();
@@ -30,6 +31,7 @@ export async function getAdminNotebookByEmail(email: string) {
 
 export async function saveAdminNotebookByEmail(email: string, content: string) {
   const ownerEmail = normalizeOwnerEmail(email);
+  const sanitizedContent = sanitizeTextInput(content, { preserveNewlines: true, maxLength: 50000 });
 
   if (!ownerEmail) {
     throw new Error("No se pudo identificar la cuenta del super admin.");
@@ -39,10 +41,10 @@ export async function saveAdminNotebookByEmail(email: string, content: string) {
     where: { ownerEmail },
     create: {
       ownerEmail,
-      content
+      content: sanitizedContent
     },
     update: {
-      content
+      content: sanitizedContent
     },
     select: {
       content: true,

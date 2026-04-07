@@ -5,6 +5,7 @@ import { NextRequest, NextResponse } from "next/server";
 
 import { getDownloadableAlbumPhotos, readPhotoBinary, recordAlbumDownload } from "@/lib/albums";
 import { checkRateLimit, getSafeErrorMessage } from "@/lib/rate-limit";
+import { sanitizeTextInput } from "@/lib/sanitize";
 
 type RouteContext = {
   params: Promise<{ slug: string }>;
@@ -36,11 +37,16 @@ export async function GET(request: NextRequest, context: RouteContext) {
       return NextResponse.json({ error: "Album no encontrado." }, { status: 404 });
     }
 
-    const type = request.nextUrl.searchParams.get("type");
-    const favoritesParam = request.nextUrl.searchParams.get("favorites");
-    const photoId = request.nextUrl.searchParams.get("photoId");
-    const sessionId = request.nextUrl.searchParams.get("sessionId")?.trim();
-    const favoriteIds = favoritesParam?.split(",").filter(Boolean) ?? [];
+    const type = sanitizeTextInput(request.nextUrl.searchParams.get("type") ?? "");
+    const favoritesParam = sanitizeTextInput(request.nextUrl.searchParams.get("favorites") ?? "", { maxLength: 5000 });
+    const photoId = sanitizeTextInput(request.nextUrl.searchParams.get("photoId") ?? "");
+    const sessionId = sanitizeTextInput(request.nextUrl.searchParams.get("sessionId") ?? "");
+    const favoriteIds = favoritesParam
+      ? favoritesParam
+          .split(",")
+          .map((value) => sanitizeTextInput(value))
+          .filter(Boolean)
+      : [];
 
     if (type === "favorites" && !album.allowFavoritesDownload) {
       return NextResponse.json({ error: "La descarga de favoritas no esta habilitada." }, { status: 403 });

@@ -5,6 +5,7 @@ import { z } from "zod";
 import { saveAlbumPhotos } from "@/lib/albums";
 import { ensureAdminApiRequest } from "@/lib/auth-guard";
 import { checkRateLimit, getSafeErrorMessage } from "@/lib/rate-limit";
+import { sanitizeTextInput } from "@/lib/sanitize";
 import { assertValidImageUpload, MAX_PHOTOS_PER_REQUEST } from "@/lib/upload-security";
 
 export const maxDuration = 60;
@@ -23,7 +24,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   try {
     const { id } = await params;
     const formData = await request.formData();
-    const albumId = z.string().cuid().parse(formData.get("albumId"));
+    const albumId = z.string().cuid().parse(sanitizeTextInput(String(formData.get("albumId") ?? "")));
 
     if (albumId !== id) {
       return NextResponse.json({ ok: false }, { status: 400 });

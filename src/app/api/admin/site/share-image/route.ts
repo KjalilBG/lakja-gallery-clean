@@ -5,12 +5,14 @@ import sharp from "sharp";
 import { NextResponse } from "next/server";
 
 import { ensureSuperAdminApiRequest } from "@/lib/auth-guard";
+import { checkRateLimit } from "@/lib/rate-limit";
 import { isR2Configured, toMediaRoute, uploadToR2 } from "@/lib/r2";
+import { sanitizeFileName as sanitizeInputFileName } from "@/lib/sanitize";
 import { assertValidImageUpload } from "@/lib/upload-security";
 
 export const maxDuration = 60;
 
-function sanitizeFileName(input: string) {
+function slugifyFileName(input: string) {
   return input
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "")
@@ -23,6 +25,13 @@ export async function POST(request: Request) {
   const unauthorizedResponse = await ensureSuperAdminApiRequest();
   if (unauthorizedResponse) return unauthorizedResponse;
 
+  const rateLimitResponse = checkRateLimit(request, {
+    label: "admin-site-share-image",
+    maxRequests: 20,
+    windowMs: 60 * 1000
+  });
+  if (rateLimitResponse) return rateLimitResponse;
+
   try {
     const formData = await request.formData();
     const file = formData.get("file");
@@ -31,8 +40,10 @@ export async function POST(request: Request) {
       throw new Error("Selecciona una imagen valida.");
     }
 
+    const fileName = sanitizeInputFileName(file.name);
+
     assertValidImageUpload({
-      fileName: file.name,
+      fileName,
       contentType: file.type,
       sizeBytes: file.size
     });
@@ -44,7 +55,7 @@ export async function POST(request: Request) {
       .jpeg({ quality: 88 })
       .toBuffer();
 
-    const fileBaseName = sanitizeFileName(file.name.replace(path.extname(file.name), "")) || `share-${Date.now()}`;
+    const fileBaseName = slugifyFileName(fileName.replace(path.extname(fileName), "")) || `share-${Date.now()}`;
     const key = `site/share/${Date.now()}-${fileBaseName}.jpg`;
 
     if (isR2Configured()) {

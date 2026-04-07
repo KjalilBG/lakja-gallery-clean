@@ -5,6 +5,7 @@ import { z } from "zod";
 import { setAlbumCoverPhoto } from "@/lib/albums";
 import { ensureAdminApiRequest } from "@/lib/auth-guard";
 import { checkRateLimit, getSafeErrorMessage } from "@/lib/rate-limit";
+import { sanitizeJsonValue } from "@/lib/sanitize";
 
 export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const unauthorizedResponse = await ensureAdminApiRequest();
@@ -19,7 +20,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
 
   try {
     const { id } = await params;
-    const body = z.object({ slug: z.string(), photoId: z.string().cuid() }).parse(await request.json());
+    const body = z.object({ slug: z.string(), photoId: z.string().cuid() }).parse(sanitizeJsonValue(await request.json()));
 
     await setAlbumCoverPhoto(id, body.photoId);
 

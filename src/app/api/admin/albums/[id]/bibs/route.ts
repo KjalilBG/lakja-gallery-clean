@@ -3,6 +3,8 @@ import { z } from "zod";
 
 import { enqueueAlbumBibRecognitionJob, processNextBibRecognitionBatch } from "@/lib/albums";
 import { ensureAdminApiRequest } from "@/lib/auth-guard";
+import { checkRateLimit } from "@/lib/rate-limit";
+import { sanitizeJsonValue } from "@/lib/sanitize";
 
 export const maxDuration = 300;
 
@@ -19,10 +21,17 @@ export async function POST(
   const unauthorizedResponse = await ensureAdminApiRequest();
   if (unauthorizedResponse) return unauthorizedResponse;
 
+  const rateLimitResponse = checkRateLimit(request, {
+    label: "admin-album-bibs",
+    maxRequests: 24,
+    windowMs: 60 * 1000
+  });
+  if (rateLimitResponse) return rateLimitResponse;
+
   const { id } = await params;
 
   try {
-    const body = bodySchema.parse(await request.json().catch(() => ({})));
+    const body = bodySchema.parse(sanitizeJsonValue(await request.json().catch(() => ({}))));
     const result =
       body.action === "process-next"
         ? await processNextBibRecognitionBatch(id)

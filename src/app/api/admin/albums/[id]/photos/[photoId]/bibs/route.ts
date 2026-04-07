@@ -3,6 +3,8 @@ import { z } from "zod";
 
 import { processSinglePhotoBibRecognition, updatePhotoBibsManually } from "@/lib/albums";
 import { ensureAdminApiRequest } from "@/lib/auth-guard";
+import { checkRateLimit } from "@/lib/rate-limit";
+import { sanitizeJsonValue, sanitizeTextInput } from "@/lib/sanitize";
 
 const bodySchema = z.discriminatedUnion("mode", [
   z.object({
@@ -10,7 +12,7 @@ const bodySchema = z.discriminatedUnion("mode", [
   }),
   z.object({
     mode: z.literal("manual"),
-    bibs: z.array(z.string()).default([])
+    bibs: z.array(z.string().transform((value) => sanitizeTextInput(value))).default([])
   })
 ]);
 
@@ -21,10 +23,17 @@ export async function POST(
   const unauthorizedResponse = await ensureAdminApiRequest();
   if (unauthorizedResponse) return unauthorizedResponse;
 
+  const rateLimitResponse = checkRateLimit(request, {
+    label: "admin-photo-bibs",
+    maxRequests: 60,
+    windowMs: 60 * 1000
+  });
+  if (rateLimitResponse) return rateLimitResponse;
+
   const { id, photoId } = await params;
 
   try {
-    const body = bodySchema.parse(await request.json().catch(() => ({})));
+    const body = bodySchema.parse(sanitizeJsonValue(await request.json().catch(() => ({}))));
 
     const result =
       body.mode === "ocr"

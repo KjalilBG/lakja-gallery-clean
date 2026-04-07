@@ -1,6 +1,20 @@
 import { createHash, timingSafeEqual } from "node:crypto";
 
-const ACCESS_SECRET = process.env.ALBUM_ACCESS_SECRET ?? "lakja-access-secret";
+function resolveAlbumAccessSecret() {
+  const configuredSecret = process.env.ALBUM_ACCESS_SECRET?.trim() || process.env.NEXTAUTH_SECRET?.trim();
+
+  if (configuredSecret) {
+    return configuredSecret;
+  }
+
+  if (process.env.NODE_ENV !== "production") {
+    return "lakja-dev-album-access-secret";
+  }
+
+  throw new Error("Configura ALBUM_ACCESS_SECRET o NEXTAUTH_SECRET para proteger los albumes privados.");
+}
+
+const ACCESS_SECRET = resolveAlbumAccessSecret();
 
 export function getAlbumAccessCookieName(slug: string) {
   return `lakja-album-access-${slug}`;

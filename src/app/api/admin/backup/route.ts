@@ -2,12 +2,20 @@ import { NextResponse } from "next/server";
 
 import { ensureAdminApiRequest } from "@/lib/auth-guard";
 import { buildAdminBackupZip } from "@/lib/admin-backup";
+import { checkRateLimit } from "@/lib/rate-limit";
 
 export const maxDuration = 60;
 
-export async function GET() {
+export async function GET(request: Request) {
   const unauthorizedResponse = await ensureAdminApiRequest();
   if (unauthorizedResponse) return unauthorizedResponse;
+
+  const rateLimitResponse = checkRateLimit(request, {
+    label: "admin-backup",
+    maxRequests: 3,
+    windowMs: 60 * 60 * 1000
+  });
+  if (rateLimitResponse) return rateLimitResponse;
 
   try {
     const { buffer, fileName } = await buildAdminBackupZip();

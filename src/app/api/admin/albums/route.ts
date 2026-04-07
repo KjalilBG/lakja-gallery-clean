@@ -6,6 +6,7 @@ import { createAlbum } from "@/lib/albums";
 import { ensureAdminApiRequest } from "@/lib/auth-guard";
 import { hashPassword } from "@/lib/password";
 import { checkRateLimit, getSafeErrorMessage } from "@/lib/rate-limit";
+import { sanitizeJsonValue } from "@/lib/sanitize";
 
 const createAlbumSchema = z.object({
   title: z.string().trim().min(3, "Agrega un nombre para el album."),
@@ -35,7 +36,7 @@ export async function POST(request: Request) {
   if (rateLimitResponse) return rateLimitResponse;
 
   try {
-    const body = await request.json();
+    const body = sanitizeJsonValue(await request.json());
     const parsed = createAlbumSchema.parse(body);
 
     if (parsed.visibility === AlbumVisibility.PASSWORD && (!parsed.password || parsed.password.length < 4)) {

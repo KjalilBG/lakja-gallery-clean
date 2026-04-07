@@ -6,6 +6,7 @@ import { saveAlbumPhotoFromStorage } from "@/lib/albums";
 import { ensureAdminApiRequest } from "@/lib/auth-guard";
 import { checkRateLimit, getSafeErrorMessage } from "@/lib/rate-limit";
 import { abortMultipartUpload, completeMultipartUpload, isR2Configured, removeFromR2 } from "@/lib/r2";
+import { sanitizeJsonValue } from "@/lib/sanitize";
 import { assertValidImageUpload } from "@/lib/upload-security";
 
 export const maxDuration = 60;
@@ -47,7 +48,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
 
   try {
     const { id } = await params;
-    const body = completeSchema.parse(await request.json());
+    const body = completeSchema.parse(sanitizeJsonValue(await request.json()));
     parsedBody = body;
 
     if (body.albumId !== id) {

@@ -6,6 +6,7 @@ import { z } from "zod";
 import { ensureAdminApiRequest } from "@/lib/auth-guard";
 import { checkRateLimit, getSafeErrorMessage } from "@/lib/rate-limit";
 import { createMultipartUpload, isR2Configured } from "@/lib/r2";
+import { sanitizeJsonValue } from "@/lib/sanitize";
 import { assertValidImageUpload, MAX_PHOTO_CHUNK_SIZE_BYTES } from "@/lib/upload-security";
 
 export const maxDuration = 60;
@@ -49,7 +50,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
 
   try {
     const { id } = await params;
-    const body = initSchema.parse(await request.json());
+    const body = initSchema.parse(sanitizeJsonValue(await request.json()));
 
     if (body.albumId !== id) {
       return NextResponse.json({ ok: false, error: "Album invalido." }, { status: 400 });

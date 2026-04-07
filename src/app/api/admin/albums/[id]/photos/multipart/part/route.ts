@@ -4,6 +4,7 @@ import { z } from "zod";
 import { ensureAdminApiRequest } from "@/lib/auth-guard";
 import { checkRateLimit, getSafeErrorMessage } from "@/lib/rate-limit";
 import { isR2Configured, uploadMultipartPart } from "@/lib/r2";
+import { sanitizeTextInput } from "@/lib/sanitize";
 import { MAX_PHOTO_CHUNK_SIZE_BYTES } from "@/lib/upload-security";
 
 export const maxDuration = 60;
@@ -34,10 +35,10 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     const { id } = await params;
     const formData = await request.formData();
     const body = paramsSchema.parse({
-      albumId: formData.get("albumId"),
-      uploadId: formData.get("uploadId"),
-      objectKey: formData.get("objectKey"),
-      partNumber: formData.get("partNumber")
+      albumId: sanitizeTextInput(String(formData.get("albumId") ?? "")),
+      uploadId: sanitizeTextInput(String(formData.get("uploadId") ?? "")),
+      objectKey: sanitizeTextInput(String(formData.get("objectKey") ?? ""), { maxLength: 2048 }),
+      partNumber: sanitizeTextInput(String(formData.get("partNumber") ?? ""))
     });
 
     if (body.albumId !== id) {
