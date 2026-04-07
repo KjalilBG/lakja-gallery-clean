@@ -4,12 +4,18 @@ import { ArrowRight, Facebook, Instagram, Sparkles } from "lucide-react";
 
 import { HomeContactCard } from "@/components/home/home-contact-card";
 import { LogoMark } from "@/components/ui/logo";
+import { getPublishedShowcasePhotos } from "@/lib/albums";
 import { getSiteSettings } from "@/lib/site-settings";
 
 export const revalidate = 300;
 
 export default async function HomePage() {
-  const settings = await getSiteSettings();
+  const [settings, showcasePhotos] = await Promise.all([getSiteSettings(), getPublishedShowcasePhotos(12)]);
+  const featuredPhotos = showcasePhotos
+    .filter((photo, index, photos) => photos.findIndex((candidate) => candidate.slug === photo.slug) === index)
+    .slice(0, 3);
+  const fallbackPhotos = showcasePhotos.slice(0, 3);
+  const galleryPhotos = featuredPhotos.length === 3 ? featuredPhotos : fallbackPhotos;
 
   return (
     <div className="space-y-12 pb-10 pt-6 md:space-y-16 md:pt-10">
@@ -35,7 +41,7 @@ export default async function HomePage() {
             ¡Estamos construyendo algo sabroso!
           </h1>
           <p className="mt-4 text-sm font-black uppercase tracking-[0.2em] text-slate-500 md:text-base">
-            Sí, hay obra. Sí, se viene bonito.
+            Algo bonito, bien hecho.
           </p>
 
           <div className="mt-8 flex flex-wrap items-center justify-center gap-3">
@@ -43,7 +49,7 @@ export default async function HomePage() {
               href="/appfotos"
               className="inline-flex items-center justify-center rounded-full border border-fuchsia-200 bg-white px-5 py-4 text-sm font-extrabold uppercase tracking-[0.16em] text-fuchsia-700 shadow-[0_14px_28px_rgba(236,72,153,0.12)] transition hover:border-fuchsia-300 hover:bg-fuchsia-50"
             >
-              Entrar a AppFotos
+              Ver AppFotos
               <ArrowRight className="ml-2 size-4" />
             </Link>
             <a
@@ -52,7 +58,7 @@ export default async function HomePage() {
               rel="noreferrer"
               className="inline-flex items-center justify-center rounded-full border border-slate-200 bg-white/90 px-5 py-4 text-sm font-extrabold uppercase tracking-[0.16em] text-slate-700 transition hover:border-slate-300"
             >
-              Escribirme
+              Hablemos
             </a>
           </div>
         </div>
@@ -61,31 +67,37 @@ export default async function HomePage() {
       <section className="grid gap-6 lg:grid-cols-[1.05fr_0.95fr]">
         <div className="grid gap-4 sm:grid-cols-2">
           <div className="relative min-h-[240px] overflow-hidden rounded-[30px] border border-fuchsia-100 bg-white shadow-[0_16px_40px_rgba(15,23,42,0.06)] sm:row-span-2">
-            <Image
-              src="/uploads/albums/cmmqrswi8000071wohuw32eiz/1773709464317-0-1-sesion-tizzy-feb26-lakja-mx-resultado.webp"
-              alt="Retrato editorial La Kja"
-              fill
-              sizes="(max-width: 768px) 100vw, 50vw"
-              className="object-cover"
-            />
+            {galleryPhotos[0] ? (
+              <Image
+                src={galleryPhotos[0].imageUrl}
+                alt={galleryPhotos[0].title}
+                fill
+                sizes="(max-width: 768px) 100vw, 50vw"
+                className="object-cover"
+              />
+            ) : null}
           </div>
           <div className="relative min-h-[180px] overflow-hidden rounded-[30px] border border-fuchsia-100 bg-white shadow-[0_16px_40px_rgba(15,23,42,0.06)]">
-            <Image
-              src="/uploads/albums/cmmqrswi8000071wohuw32eiz/1773708019987-2-3-sesion-tizzy-feb26-lakja-mx-resultado.webp"
-              alt="Galería editorial La Kja"
-              fill
-              sizes="(max-width: 768px) 100vw, 25vw"
-              className="object-cover"
-            />
+            {galleryPhotos[1] ? (
+              <Image
+                src={galleryPhotos[1].imageUrl}
+                alt={galleryPhotos[1].title}
+                fill
+                sizes="(max-width: 768px) 100vw, 25vw"
+                className="object-cover"
+              />
+            ) : null}
           </div>
           <div className="relative min-h-[180px] overflow-hidden rounded-[30px] border border-fuchsia-100 bg-white shadow-[0_16px_40px_rgba(15,23,42,0.06)]">
-            <Image
-              src="/uploads/albums/cmmqrswi8000071wohuw32eiz/1773708020057-3-4-sesion-tizzy-feb26-lakja-mx-resultado.webp"
-              alt="Fotografía creativa La Kja"
-              fill
-              sizes="(max-width: 768px) 100vw, 25vw"
-              className="object-cover"
-            />
+            {galleryPhotos[2] ? (
+              <Image
+                src={galleryPhotos[2].imageUrl}
+                alt={galleryPhotos[2].title}
+                fill
+                sizes="(max-width: 768px) 100vw, 25vw"
+                className="object-cover"
+              />
+            ) : null}
           </div>
         </div>
 
