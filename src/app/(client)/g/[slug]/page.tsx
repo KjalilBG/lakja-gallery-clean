@@ -43,7 +43,7 @@ export async function generateMetadata({ params }: GalleryPageProps): Promise<Me
   const imageUrl = resolveAbsoluteImageUrl(
     album?.coverPhoto ? toMediaRoute(album.coverPhoto.previewKey ?? album.coverPhoto.originalKey) : siteSettings.shareImageUrl
   );
-  const canonicalUrl = `${resolveAppUrl()}/g/${slug}`;
+  const canonicalUrl = `${resolveAppUrl()}/appfotos/g/${slug}`;
 
   return {
     title,

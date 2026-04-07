@@ -15,11 +15,11 @@ export async function unlockAlbumAction(formData: FormData) {
   const album = await getAlbumBySlug(slug);
 
   if (!album || !album.passwordHash) {
-    redirect(`/g/${slug}`);
+    redirect(`/appfotos/g/${slug}`);
   }
 
   if (!verifyPassword(password, album.passwordHash)) {
-    redirect(`/g/${slug}?error=password`);
+    redirect(`/appfotos/g/${slug}?error=password`);
   }
 
   const cookieStore = await cookies();
@@ -27,9 +27,9 @@ export async function unlockAlbumAction(formData: FormData) {
     httpOnly: true,
     sameSite: "lax",
     secure: process.env.NODE_ENV === "production",
-    path: `/g/${slug}`,
+    path: `/appfotos/g/${slug}`,
     maxAge: 60 * 60 * 12
   });
 
-  redirect(`/g/${slug}`);
+  redirect(`/appfotos/g/${slug}`);
 }

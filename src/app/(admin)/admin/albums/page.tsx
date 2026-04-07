@@ -19,7 +19,7 @@ export default async function AlbumsPage() {
             Esta vista ya consulta la base de datos real. Cada nuevo album que guardes aparecera aqui automaticamente.
           </p>
         </div>
-        <Link href="/admin/albums/new">
+        <Link href="/appfotos/admin/albums/new">
           <Button>Crear nuevo album</Button>
         </Link>
       </section>
@@ -27,7 +27,7 @@ export default async function AlbumsPage() {
       {albums.length > 0 ? (
         <div className="grid gap-5 xl:grid-cols-2">
           {albums.map((album) => (
-            <AlbumCard key={album.id} album={album} actionHref={`/admin/albums/${album.id}`} actionLabel="Gestionar" />
+            <AlbumCard key={album.id} album={album} actionHref={`/appfotos/admin/albums/${album.id}`} actionLabel="Gestionar" />
           ))}
         </div>
       ) : (

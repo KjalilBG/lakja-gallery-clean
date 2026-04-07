@@ -1,6 +1,8 @@
 import Link from "next/link";
+import Image from "next/image";
 import { ArrowRight, Camera, Clock3, Sparkles, Star } from "lucide-react";
 
+import { HomeContactCard } from "@/components/home/home-contact-card";
 import { getSiteSettings } from "@/lib/site-settings";
 
 export const revalidate = 300;
@@ -30,6 +32,9 @@ export default async function HomePage() {
               <p className="max-w-2xl text-base leading-8 text-slate-600 md:text-lg">
                 La casa principal de La Kja está en proceso. Mientras la afinamos, la app de galerías sigue activa para clientes,
                 entregas y selección de fotos.
+              </p>
+              <p className="text-sm font-black uppercase tracking-[0.18em] text-slate-500">
+                En construcción, pero con cafecito, cables y fe.
               </p>
             </div>
 
@@ -96,6 +101,71 @@ export default async function HomePage() {
               </div>
             </div>
           </div>
+        </div>
+      </section>
+
+      <section className="grid gap-6 lg:grid-cols-[1.05fr_0.95fr]">
+        <div className="grid gap-4 sm:grid-cols-2">
+          <div className="relative min-h-[240px] overflow-hidden rounded-[30px] border border-slate-200 bg-white shadow-[0_16px_40px_rgba(15,23,42,0.06)] sm:row-span-2">
+            <Image
+              src="/uploads/albums/cmmqrswi8000071wohuw32eiz/1773709464317-0-1-sesion-tizzy-feb26-lakja-mx-resultado.webp"
+              alt="Retrato editorial La Kja"
+              fill
+              sizes="(max-width: 768px) 100vw, 50vw"
+              className="object-cover"
+            />
+          </div>
+          <div className="relative min-h-[180px] overflow-hidden rounded-[30px] border border-slate-200 bg-white shadow-[0_16px_40px_rgba(15,23,42,0.06)]">
+            <Image
+              src="/uploads/albums/cmmqrswi8000071wohuw32eiz/1773708019987-2-3-sesion-tizzy-feb26-lakja-mx-resultado.webp"
+              alt="Galería editorial La Kja"
+              fill
+              sizes="(max-width: 768px) 100vw, 25vw"
+              className="object-cover"
+            />
+          </div>
+          <div className="relative min-h-[180px] overflow-hidden rounded-[30px] border border-slate-200 bg-white shadow-[0_16px_40px_rgba(15,23,42,0.06)]">
+            <Image
+              src="/uploads/albums/cmmqrswi8000071wohuw32eiz/1773708020057-3-4-sesion-tizzy-feb26-lakja-mx-resultado.webp"
+              alt="Fotografía creativa La Kja"
+              fill
+              sizes="(max-width: 768px) 100vw, 25vw"
+              className="object-cover"
+            />
+          </div>
+        </div>
+
+        <HomeContactCard whatsappNumber={settings.whatsappNumber} />
+      </section>
+
+      <section className="rounded-[32px] border border-slate-200 bg-white px-6 py-8 text-center shadow-[0_16px_40px_rgba(15,23,42,0.05)]">
+        <p className="text-xs font-extrabold uppercase tracking-[0.26em] text-slate-400">Mientras llega la home completa</p>
+        <p className="mx-auto mt-3 max-w-2xl text-base leading-8 text-slate-600">
+          Puedes entrar a <span className="font-black text-slate-900">AppFotos</span> para galerías y entregas, o caerle a redes para ver el mood real de la marca.
+        </p>
+        <div className="mt-5 flex flex-wrap items-center justify-center gap-3">
+          <a
+            href={settings.instagramUrl}
+            target="_blank"
+            rel="noreferrer"
+            className="inline-flex items-center justify-center rounded-full border border-slate-200 bg-slate-50 px-5 py-3 text-sm font-extrabold uppercase tracking-[0.14em] text-slate-700 transition hover:border-fuchsia-200 hover:text-fuchsia-600"
+          >
+            Instagram
+          </a>
+          <a
+            href={settings.facebookUrl}
+            target="_blank"
+            rel="noreferrer"
+            className="inline-flex items-center justify-center rounded-full border border-slate-200 bg-slate-50 px-5 py-3 text-sm font-extrabold uppercase tracking-[0.14em] text-slate-700 transition hover:border-sky-200 hover:text-sky-600"
+          >
+            Facebook
+          </a>
+          <Link
+            href="/appfotos"
+            className="inline-flex items-center justify-center rounded-full border border-lime-200 bg-lime-50 px-5 py-3 text-sm font-extrabold uppercase tracking-[0.14em] text-lime-700 transition hover:bg-lime-100"
+          >
+            Ir a AppFotos
+          </Link>
         </div>
       </section>
     </div>

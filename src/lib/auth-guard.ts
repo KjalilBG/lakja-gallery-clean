@@ -3,7 +3,7 @@ import { NextResponse } from "next/server";
 
 import { getServerAuthSession, isSuperAdminEmail } from "@/lib/auth";
 
-export async function requireAdminSession(callbackUrl = "/admin") {
+export async function requireAdminSession(callbackUrl = "/appfotos/admin") {
   const session = await getServerAuthSession();
 
   if (!session?.user) {
@@ -37,11 +37,11 @@ export async function ensureSuperAdminApiRequest() {
   return null;
 }
 
-export async function requireSuperAdminSession(callbackUrl = "/admin") {
+export async function requireSuperAdminSession(callbackUrl = "/appfotos/admin") {
   const session = await requireAdminSession(callbackUrl);
 
   if (!isSuperAdminEmail(session.user?.email)) {
-    redirect("/admin");
+    redirect("/appfotos/admin");
   }
 
   return session;

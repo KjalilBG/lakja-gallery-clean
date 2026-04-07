@@ -8,15 +8,15 @@ import { AdminSignOutButton } from "@/components/admin/admin-sign-out-button";
 export const dynamic = "force-dynamic";
 
 export default async function AdminLayout({ children }: Readonly<{ children: React.ReactNode }>) {
-  await requireAdminSession("/admin");
+  await requireAdminSession("/appfotos/admin");
   const [session, stats] = await Promise.all([getServerAuthSession(), getAdminNavStats()]);
   const isSuperAdmin = isSuperAdminEmail(session?.user?.email);
   const adminNav = [
-    { label: "Resumen", href: "/admin" },
-    { label: "Albumes", href: "/admin/albums", badge: stats.draftAlbums > 0 ? String(stats.draftAlbums) : null },
-    { label: "Nuevo album", href: "/admin/albums/new" },
+    { label: "Resumen", href: "/appfotos/admin" },
+    { label: "Albumes", href: "/appfotos/admin/albums", badge: stats.draftAlbums > 0 ? String(stats.draftAlbums) : null },
+    { label: "Nuevo album", href: "/appfotos/admin/albums/new" },
     ...(isSuperAdmin
-      ? [{ label: "Sitio", href: "/admin/site", badge: stats.pendingSelections > 0 ? String(stats.pendingSelections) : null }]
+      ? [{ label: "Sitio", href: "/appfotos/admin/site", badge: stats.pendingSelections > 0 ? String(stats.pendingSelections) : null }]
       : [])
   ];
 

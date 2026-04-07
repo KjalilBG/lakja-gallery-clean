@@ -52,19 +52,19 @@ export default async function AdminPage() {
 
   const quickActions = [
     {
-      href: "/admin/albums/new",
+      href: "/appfotos/admin/albums/new",
       label: "Crear nuevo álbum",
       description: "Arranca una entrega nueva y súbele fotos desde cero.",
       icon: ImagePlus
     },
     {
-      href: "/admin/albums",
+      href: "/appfotos/admin/albums",
       label: "Ver todos los álbumes",
       description: "Entra directo al inventario completo y retoma trabajo.",
       icon: Camera
     },
     {
-      href: "/admin/site",
+      href: "/appfotos/admin/site",
       label: "Ajustar sitio y marca",
       description: "Cambia share preview, redes, home y mantenimiento.",
       icon: Sparkles
@@ -143,14 +143,14 @@ export default async function AdminPage() {
                 <p className="text-xs font-extrabold uppercase tracking-[0.32em] text-slate-400 dark:text-slate-500">Álbumes</p>
                 <h2 className="mt-2 text-4xl font-black tracking-tight text-slate-900 dark:text-white">Tus entregas recientes</h2>
               </div>
-              <Link href="/admin/albums" className="text-sm font-bold text-slate-500 transition hover:text-slate-900 dark:text-slate-300 dark:hover:text-white">
+              <Link href="/appfotos/admin/albums" className="text-sm font-bold text-slate-500 transition hover:text-slate-900 dark:text-slate-300 dark:hover:text-white">
                 Ver inventario completo
               </Link>
             </div>
             {recentAlbums.length > 0 ? (
               <div className="grid gap-5 xl:grid-cols-2">
                 {recentAlbums.slice(0, 4).map((album) => (
-                  <AlbumCard key={album.id} album={album} actionHref={`/admin/albums/${album.id}`} actionLabel="Gestionar" />
+                  <AlbumCard key={album.id} album={album} actionHref={`/appfotos/admin/albums/${album.id}`} actionLabel="Gestionar" />
                 ))}
               </div>
             ) : (
@@ -175,7 +175,7 @@ export default async function AdminPage() {
                 {recentSelections.map((selection) => (
                   <Link
                     key={selection.id}
-                    href={`/admin/albums/${selection.albumId}`}
+                    href={`/appfotos/admin/albums/${selection.albumId}`}
                     className="block rounded-[22px] border border-slate-200 bg-slate-50 px-4 py-4 transition hover:border-slate-300 hover:bg-white dark:border-slate-700 dark:bg-slate-800/70 dark:hover:border-slate-600 dark:hover:bg-slate-800"
                   >
                     <div className="flex items-start justify-between gap-3">
@@ -212,7 +212,7 @@ export default async function AdminPage() {
                 <p className="text-[10px] font-extrabold uppercase tracking-[0.2em] text-slate-400 dark:text-slate-500">Más vistas</p>
                 <div className="mt-3 space-y-3">
                   {topViewedAlbums.map((album, index) => (
-                    <Link key={album.id} href={`/admin/albums/${album.id}`} className="flex items-center justify-between gap-3 text-sm">
+                    <Link key={album.id} href={`/appfotos/admin/albums/${album.id}`} className="flex items-center justify-between gap-3 text-sm">
                       <div className="min-w-0">
                         <p className="truncate font-black text-slate-900 dark:text-white">{index + 1}. {album.title}</p>
                         <p className="truncate text-slate-500 dark:text-slate-300">{album.clientName}</p>
@@ -228,7 +228,7 @@ export default async function AdminPage() {
                 <p className="text-[10px] font-extrabold uppercase tracking-[0.2em] text-slate-400 dark:text-slate-500">Más favoritas</p>
                 <div className="mt-3 space-y-3">
                   {topFavoriteAlbums.map((album, index) => (
-                    <Link key={album.id} href={`/admin/albums/${album.id}`} className="flex items-center justify-between gap-3 text-sm">
+                    <Link key={album.id} href={`/appfotos/admin/albums/${album.id}`} className="flex items-center justify-between gap-3 text-sm">
                       <div className="min-w-0">
                         <p className="truncate font-black text-slate-900 dark:text-white">{index + 1}. {album.title}</p>
                         <p className="truncate text-slate-500 dark:text-slate-300">{album.clientName}</p>

@@ -16,8 +16,8 @@ type AdminSidebarNavProps = {
 };
 
 function isItemActive(pathname: string, href: string) {
-  if (href === "/admin") {
-    return pathname === "/admin";
+  if (href === "/appfotos/admin") {
+    return pathname === "/appfotos/admin";
   }
 
   return pathname === href || pathname.startsWith(`${href}/`);

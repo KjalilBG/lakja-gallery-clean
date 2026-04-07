@@ -32,7 +32,7 @@ export function SiteMaintenanceState({ title, message, whatsappNumber }: SiteMai
             Escribirme por WhatsApp
           </a>
           <Link
-            href="/admin"
+            href="/appfotos/admin"
             className="inline-flex items-center justify-center rounded-full border border-slate-200 px-6 py-4 text-sm font-extrabold uppercase tracking-[0.16em] text-slate-700 transition hover:border-slate-300 hover:text-slate-950"
           >
             Ir al admin

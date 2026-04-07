@@ -29,7 +29,7 @@ export const siteConfig = {
   nav: [
     { label: "Inicio", href: "/" },
     { label: "AppFotos", href: "/appfotos" },
-    { label: "Admin", href: "/admin" }
+    { label: "Admin", href: "/appfotos/admin" }
   ],
   socials: [
     { label: "Instagram", href: "https://instagram.com/lakja.top" },

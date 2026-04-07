@@ -190,7 +190,7 @@ export function NewAlbumForm() {
       setSubmitPhase("processing");
       setSubmitLabel(queuedFiles.length > 0 ? "Finalizando album..." : "Finalizando...");
       setProgress(100);
-      router.push(`/admin/albums/${createdAlbum.albumId}${queuedFiles.length > 0 ? "?uploaded=1" : ""}`);
+      router.push(`/appfotos/admin/albums/${createdAlbum.albumId}${queuedFiles.length > 0 ? "?uploaded=1" : ""}`);
       router.refresh();
     } catch (error) {
       setSubmitError(error instanceof Error ? error.message : "No se pudo completar el proceso.");

@@ -95,7 +95,7 @@ function getActiveTab(input?: string): SiteTab {
 }
 
 export default async function SiteSettingsPage({ searchParams }: SiteSettingsPageProps) {
-  const session = await requireSuperAdminSession("/admin/site");
+  const session = await requireSuperAdminSession("/appfotos/admin/site");
   const currentUserEmail = session.user?.email ?? "";
 
   const [settings, adminAlbums, adminNotebook, resolvedSearchParams] = await Promise.all([
@@ -167,7 +167,7 @@ export default async function SiteSettingsPage({ searchParams }: SiteSettingsPag
           {tabs.map((tab) => (
             <a
               key={tab.key}
-              href={`/admin/site?tab=${tab.key}`}
+              href={`/appfotos/admin/site?tab=${tab.key}`}
               className={`inline-flex items-center justify-center rounded-full px-4 py-2.5 text-xs font-extrabold uppercase tracking-[0.14em] transition md:text-sm ${
                 activeTab === tab.key
                   ? "bg-slate-950 text-white shadow-[0_10px_25px_rgba(15,23,42,0.14)] dark:bg-white dark:text-slate-950"

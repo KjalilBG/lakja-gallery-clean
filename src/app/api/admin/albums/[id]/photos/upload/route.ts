@@ -51,9 +51,9 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     }
     await saveAlbumPhotos(albumId, photos);
 
-    revalidatePath(`/admin/albums/${albumId}`);
-    revalidatePath("/admin/albums");
-    revalidatePath("/admin");
+    revalidatePath(`/appfotos/admin/albums/${albumId}`);
+    revalidatePath("/appfotos/admin/albums");
+    revalidatePath("/appfotos/admin");
 
     return NextResponse.json({ ok: true });
   } catch (error) {

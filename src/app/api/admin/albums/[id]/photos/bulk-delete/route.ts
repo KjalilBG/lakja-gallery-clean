@@ -29,10 +29,10 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
 
     await deleteAlbumPhotos(id, body.photoIds);
 
-    revalidatePath(`/admin/albums/${id}`);
-    revalidatePath("/admin/albums");
-    revalidatePath("/admin");
-    revalidatePath(`/g/${body.slug}`);
+    revalidatePath(`/appfotos/admin/albums/${id}`);
+    revalidatePath("/appfotos/admin/albums");
+    revalidatePath("/appfotos/admin");
+    revalidatePath(`/appfotos/g/${body.slug}`);
 
     return NextResponse.json({ ok: true });
   } catch (error) {

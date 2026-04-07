@@ -42,7 +42,7 @@ const siteSettingsSchema = z.object({
 });
 
 export async function saveSiteSettingsAction(formData: FormData) {
-  await requireSuperAdminSession("/admin/site");
+  await requireSuperAdminSession("/appfotos/admin/site");
 
   const currentSettings = await getSiteSettings();
   const activeTab = String(formData.get("tab") ?? "general");
@@ -97,7 +97,7 @@ export async function saveSiteSettingsAction(formData: FormData) {
 
   if (!parsedInput.success) {
     const encodedMessage = encodeURIComponent(parsedInput.error.issues[0]?.message ?? "No se pudo guardar la configuracion.");
-    redirect(`/admin/site?error=${encodedMessage}`);
+    redirect(`/appfotos/admin/site?error=${encodedMessage}`);
   }
 
   await upsertSiteSettings({
@@ -127,7 +127,8 @@ export async function saveSiteSettingsAction(formData: FormData) {
   revalidatePath("/", "layout");
   revalidatePath("/");
   revalidatePath("/g/[slug]", "page");
-  revalidatePath("/admin/site");
+  revalidatePath("/appfotos/g/[slug]", "page");
+  revalidatePath("/appfotos/admin/site");
 
-  redirect(`/admin/site?tab=${encodeURIComponent(activeTab)}&saved=1`);
+  redirect(`/appfotos/admin/site?tab=${encodeURIComponent(activeTab)}&saved=1`);
 }

@@ -14,7 +14,7 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
   const session = await getServerAuthSession();
   const resolvedSearchParams = await searchParams;
   const callbackUrl =
-    typeof resolvedSearchParams.callbackUrl === "string" ? resolvedSearchParams.callbackUrl : "/admin";
+    typeof resolvedSearchParams.callbackUrl === "string" ? resolvedSearchParams.callbackUrl : "/appfotos/admin";
   const error = typeof resolvedSearchParams.error === "string" ? resolvedSearchParams.error : "";
 
   if (session?.user) {

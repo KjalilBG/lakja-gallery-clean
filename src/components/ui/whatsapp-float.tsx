@@ -15,7 +15,7 @@ export function WhatsAppFloat({ whatsappNumber, defaultMessage }: WhatsAppFloatP
   const [message, setMessage] = useState(defaultMessage);
 
   const shouldHide = useMemo(
-    () => pathname?.startsWith("/admin") || pathname?.startsWith("/login"),
+    () => pathname?.startsWith("/appfotos/admin") || pathname?.startsWith("/login"),
     [pathname]
   );
 

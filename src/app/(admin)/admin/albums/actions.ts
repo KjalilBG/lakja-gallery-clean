@@ -41,7 +41,7 @@ const albumSchema = z.object({
 });
 
 export async function createAlbumAction(formData: FormData) {
-  await requireAdminSession("/admin/albums/new");
+  await requireAdminSession("/appfotos/admin/albums/new");
   const parsed = albumSchema.parse({
     title: formData.get("title"),
     clientName: formData.get("clientName"),
@@ -76,62 +76,62 @@ export async function createAlbumAction(formData: FormData) {
     await saveAlbumPhotos(album.id, photos);
   }
 
-  revalidatePath("/admin");
-  revalidatePath("/admin/albums");
+  revalidatePath("/appfotos/admin");
+  revalidatePath("/appfotos/admin/albums");
   revalidatePath("/");
-  redirect(`/admin/albums/${album.id}`);
+  redirect(`/appfotos/admin/albums/${album.id}`);
 }
 
 export async function uploadAlbumPhotosAction(formData: FormData) {
-  await requireAdminSession("/admin/albums");
+  await requireAdminSession("/appfotos/admin/albums");
   const albumId = z.string().cuid().parse(formData.get("albumId"));
   const photos = formData
     .getAll("photos")
     .filter((entry): entry is File => entry instanceof File && entry.size > 0);
 
   if (photos.length === 0) {
-    redirect(`/admin/albums/${albumId}`);
+    redirect(`/appfotos/admin/albums/${albumId}`);
   }
 
   await saveAlbumPhotos(albumId, photos);
 
-  revalidatePath(`/admin/albums/${albumId}`);
-  revalidatePath("/admin/albums");
-  revalidatePath("/admin");
-  redirect(`/admin/albums/${albumId}?uploaded=1`);
+  revalidatePath(`/appfotos/admin/albums/${albumId}`);
+  revalidatePath("/appfotos/admin/albums");
+  revalidatePath("/appfotos/admin");
+  redirect(`/appfotos/admin/albums/${albumId}?uploaded=1`);
 }
 
 export async function setAlbumCoverAction(formData: FormData) {
-  await requireAdminSession("/admin/albums");
+  await requireAdminSession("/appfotos/admin/albums");
   const albumId = z.string().cuid().parse(formData.get("albumId"));
   const photoId = z.string().cuid().parse(formData.get("photoId"));
   const slug = z.string().parse(formData.get("slug"));
 
   await setAlbumCoverPhoto(albumId, photoId);
 
-  revalidatePath(`/admin/albums/${albumId}`);
-  revalidatePath("/admin/albums");
-  revalidatePath("/admin");
-  revalidatePath(`/g/${slug}`);
-  redirect(`/admin/albums/${albumId}?saved=1`);
+  revalidatePath(`/appfotos/admin/albums/${albumId}`);
+  revalidatePath("/appfotos/admin/albums");
+  revalidatePath("/appfotos/admin");
+  revalidatePath(`/appfotos/g/${slug}`);
+  redirect(`/appfotos/admin/albums/${albumId}?saved=1`);
 }
 
 export async function moveAlbumPhotoAction(formData: FormData) {
-  await requireAdminSession("/admin/albums");
+  await requireAdminSession("/appfotos/admin/albums");
   const albumId = z.string().cuid().parse(formData.get("albumId"));
   const photoId = z.string().cuid().parse(formData.get("photoId"));
   const direction = z.enum(["up", "down"]).parse(formData.get("direction"));
 
   await moveAlbumPhoto(albumId, photoId, direction);
 
-  revalidatePath(`/admin/albums/${albumId}`);
-  revalidatePath("/admin/albums");
-  revalidatePath(`/g/${formData.get("slug")}`);
-  redirect(`/admin/albums/${albumId}?saved=1`);
+  revalidatePath(`/appfotos/admin/albums/${albumId}`);
+  revalidatePath("/appfotos/admin/albums");
+  revalidatePath(`/appfotos/g/${formData.get("slug")}`);
+  redirect(`/appfotos/admin/albums/${albumId}?saved=1`);
 }
 
 export async function updateAlbumAction(formData: FormData) {
-  await requireAdminSession("/admin/albums");
+  await requireAdminSession("/appfotos/admin/albums");
   const albumId = z.string().cuid().parse(formData.get("albumId"));
   const previousSlug = z.string().parse(formData.get("slug"));
   const parsed = albumSchema.parse({
@@ -154,7 +154,7 @@ export async function updateAlbumAction(formData: FormData) {
   const currentAlbum = await getAlbumPasswordMetaById(albumId);
 
   if (!currentAlbum) {
-    redirect("/admin/albums");
+    redirect("/appfotos/admin/albums");
   }
 
   if (parsed.visibility === AlbumVisibility.PASSWORD && !currentAlbum.passwordHash && (!parsed.password || parsed.password.length < 4)) {
@@ -171,111 +171,111 @@ export async function updateAlbumAction(formData: FormData) {
         : null
   });
 
-  revalidatePath(`/admin/albums/${albumId}`);
-  revalidatePath("/admin/albums");
-  revalidatePath("/admin");
+  revalidatePath(`/appfotos/admin/albums/${albumId}`);
+  revalidatePath("/appfotos/admin/albums");
+  revalidatePath("/appfotos/admin");
   revalidatePath("/");
-  revalidatePath(`/g/${previousSlug}`);
-  revalidatePath(`/g/${album.slug}`);
-  redirect(`/admin/albums/${albumId}?saved=1`);
+  revalidatePath(`/appfotos/g/${previousSlug}`);
+  revalidatePath(`/appfotos/g/${album.slug}`);
+  redirect(`/appfotos/admin/albums/${albumId}?saved=1`);
 }
 
 export async function processAlbumBibRecognitionAction(formData: FormData) {
-  await requireAdminSession("/admin/albums");
+  await requireAdminSession("/appfotos/admin/albums");
   const albumId = z.string().cuid().parse(formData.get("albumId"));
   try {
     const result = await processAlbumBibRecognition(albumId);
 
-    revalidatePath(`/admin/albums/${albumId}`);
-    revalidatePath("/admin/albums");
-    revalidatePath("/admin");
-    revalidatePath(`/g/${result.slug}`);
+    revalidatePath(`/appfotos/admin/albums/${albumId}`);
+    revalidatePath("/appfotos/admin/albums");
+    revalidatePath("/appfotos/admin");
+    revalidatePath(`/appfotos/g/${result.slug}`);
     redirect(
-      `/admin/albums/${albumId}?ocr=1&recognized=${result.recognizedCount}&processed=${result.processedCount}&failed=${result.failedCount}`
+      `/appfotos/admin/albums/${albumId}?ocr=1&recognized=${result.recognizedCount}&processed=${result.processedCount}&failed=${result.failedCount}`
     );
   } catch (error) {
     const message = error instanceof Error ? error.message : "No se pudo procesar OCR.";
-    redirect(`/admin/albums/${albumId}?ocrError=${encodeURIComponent(message)}`);
+    redirect(`/appfotos/admin/albums/${albumId}?ocrError=${encodeURIComponent(message)}`);
   }
 }
 
 export async function deleteAlbumPhotoAction(formData: FormData) {
-  await requireAdminSession("/admin/albums");
+  await requireAdminSession("/appfotos/admin/albums");
   const albumId = z.string().cuid().parse(formData.get("albumId"));
   const photoId = z.string().cuid().parse(formData.get("photoId"));
   const slug = z.string().parse(formData.get("slug"));
 
   await deleteAlbumPhoto(albumId, photoId);
 
-  revalidatePath(`/admin/albums/${albumId}`);
-  revalidatePath("/admin/albums");
-  revalidatePath("/admin");
-  revalidatePath(`/g/${slug}`);
-  redirect(`/admin/albums/${albumId}?photoDeleted=1`);
+  revalidatePath(`/appfotos/admin/albums/${albumId}`);
+  revalidatePath("/appfotos/admin/albums");
+  revalidatePath("/appfotos/admin");
+  revalidatePath(`/appfotos/g/${slug}`);
+  redirect(`/appfotos/admin/albums/${albumId}?photoDeleted=1`);
 }
 
 export async function deleteAlbumAction(formData: FormData) {
-  await requireAdminSession("/admin/albums");
+  await requireAdminSession("/appfotos/admin/albums");
   const albumId = z.string().cuid().parse(formData.get("albumId"));
 
   const deletedAlbum = await deleteAlbum(albumId);
 
-  revalidatePath("/admin");
-  revalidatePath("/admin/albums");
+  revalidatePath("/appfotos/admin");
+  revalidatePath("/appfotos/admin/albums");
   revalidatePath("/");
 
   if (deletedAlbum) {
-    revalidatePath(`/g/${deletedAlbum.slug}`);
+    revalidatePath(`/appfotos/g/${deletedAlbum.slug}`);
   }
 
-  redirect("/admin/albums");
+  redirect("/appfotos/admin/albums");
 }
 
 export async function deleteFavoriteSelectionAction(formData: FormData) {
-  await requireAdminSession("/admin/albums");
+  await requireAdminSession("/appfotos/admin/albums");
   const albumId = z.string().cuid().parse(formData.get("albumId"));
   const selectionId = z.string().cuid().parse(formData.get("selectionId"));
 
   await deleteFavoriteSelection(selectionId, albumId);
 
-  revalidatePath(`/admin/albums/${albumId}`);
-  revalidatePath("/admin/albums");
-  revalidatePath("/admin");
-  redirect(`/admin/albums/${albumId}?saved=1`);
+  revalidatePath(`/appfotos/admin/albums/${albumId}`);
+  revalidatePath("/appfotos/admin/albums");
+  revalidatePath("/appfotos/admin");
+  redirect(`/appfotos/admin/albums/${albumId}?saved=1`);
 }
 
 export async function updateFavoriteSelectionStatusAction(formData: FormData) {
-  await requireAdminSession("/admin/albums");
+  await requireAdminSession("/appfotos/admin/albums");
   const albumId = z.string().cuid().parse(formData.get("albumId"));
   const selectionId = z.string().cuid().parse(formData.get("selectionId"));
   const status = z.nativeEnum(FavoriteSelectionStatus).parse(formData.get("status"));
 
   await updateFavoriteSelectionStatus(selectionId, albumId, status);
 
-  revalidatePath(`/admin/albums/${albumId}`);
-  revalidatePath("/admin/albums");
-  revalidatePath("/admin");
-  redirect(`/admin/albums/${albumId}?saved=1`);
+  revalidatePath(`/appfotos/admin/albums/${albumId}`);
+  revalidatePath("/appfotos/admin/albums");
+  revalidatePath("/appfotos/admin");
+  redirect(`/appfotos/admin/albums/${albumId}?saved=1`);
 }
 
 export async function processPhotoBibRecognitionAction(formData: FormData) {
-  await requireAdminSession("/admin/albums");
+  await requireAdminSession("/appfotos/admin/albums");
   const albumId = z.string().cuid().parse(formData.get("albumId"));
   const photoId = z.string().cuid().parse(formData.get("photoId"));
 
   try {
     const result = await processSinglePhotoBibRecognition(albumId, photoId);
-    revalidatePath(`/admin/albums/${albumId}`);
-    revalidatePath(`/g/${result.slug}`);
-    redirect(`/admin/albums/${albumId}?ocrPhoto=1`);
+    revalidatePath(`/appfotos/admin/albums/${albumId}`);
+    revalidatePath(`/appfotos/g/${result.slug}`);
+    redirect(`/appfotos/admin/albums/${albumId}?ocrPhoto=1`);
   } catch (error) {
     const message = error instanceof Error ? error.message : "No se pudo reintentar OCR en la foto.";
-    redirect(`/admin/albums/${albumId}?ocrError=${encodeURIComponent(message)}`);
+    redirect(`/appfotos/admin/albums/${albumId}?ocrError=${encodeURIComponent(message)}`);
   }
 }
 
 export async function updatePhotoBibsManualAction(formData: FormData) {
-  await requireAdminSession("/admin/albums");
+  await requireAdminSession("/appfotos/admin/albums");
   const albumId = z.string().cuid().parse(formData.get("albumId"));
   const photoId = z.string().cuid().parse(formData.get("photoId"));
   const rawValue = formData.get("manualBibs");
@@ -290,11 +290,11 @@ export async function updatePhotoBibsManualAction(formData: FormData) {
         .map((value) => value.trim())
         .filter(Boolean)
     );
-    revalidatePath(`/admin/albums/${albumId}`);
-    revalidatePath(`/g/${result.slug}`);
-    redirect(`/admin/albums/${albumId}?ocrManual=1`);
+    revalidatePath(`/appfotos/admin/albums/${albumId}`);
+    revalidatePath(`/appfotos/g/${result.slug}`);
+    redirect(`/appfotos/admin/albums/${albumId}?ocrManual=1`);
   } catch (error) {
     const message = error instanceof Error ? error.message : "No se pudo guardar el bib manual.";
-    redirect(`/admin/albums/${albumId}?ocrError=${encodeURIComponent(message)}`);
+    redirect(`/appfotos/admin/albums/${albumId}?ocrError=${encodeURIComponent(message)}`);
   }
 }

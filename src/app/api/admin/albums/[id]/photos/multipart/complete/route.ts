@@ -78,9 +78,9 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       sortOrder: body.sortOrder
     });
 
-    revalidatePath(`/admin/albums/${body.albumId}`);
-    revalidatePath("/admin/albums");
-    revalidatePath("/admin");
+    revalidatePath(`/appfotos/admin/albums/${body.albumId}`);
+    revalidatePath("/appfotos/admin/albums");
+    revalidatePath("/appfotos/admin");
 
     return NextResponse.json({ ok: true });
   } catch (error) {

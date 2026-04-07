@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { AlbumStatus, AlbumVisibility, FavoriteSelectionStatus } from "@prisma/client";
-import { ArrowLeft, CheckCheck, Download, ExternalLink, Eye, FileSearch, FileText, Heart, Settings2, TimerReset, Trash2, UploadCloud, Wand2 } from "lucide-react";
+import { AlbumStatus, AlbumVisibility } from "@prisma/client";
+import { ArrowLeft, Download, ExternalLink, Eye, FileText, Heart, Settings2, Trash2, UploadCloud } from "lucide-react";
 
 import { AlbumPhotoWorkspace } from "@/components/admin/album-photo-workspace";
 import { AlbumPhotoUploader } from "@/components/admin/album-photo-uploader";
@@ -15,7 +15,7 @@ import { getObjectPositionFromFocus } from "@/lib/cover";
 import { getAdminAlbumById } from "@/lib/albums";
 import { formatDate } from "@/lib/format";
 
-import { deleteAlbumAction, deleteFavoriteSelectionAction, updateAlbumAction, updateFavoriteSelectionStatusAction } from "../actions";
+import { deleteAlbumAction, deleteFavoriteSelectionAction, updateAlbumAction } from "../actions";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 300;
@@ -25,49 +25,20 @@ type AlbumDetailPageProps = {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 };
 
-type FavoriteSelectionFilter = "all" | "pending" | "editing" | "delivered";
-
-function favoriteStatusLabel(status: "pending" | "editing" | "delivered") {
-  return status === "editing" ? "En edicion" : status === "delivered" ? "Entregado" : "Pendiente";
-}
-
-function favoriteStatusClasses(status: "pending" | "editing" | "delivered") {
-  return status === "editing"
-    ? "border-amber-200 bg-amber-50 text-amber-700"
-    : status === "delivered"
-      ? "border-lime-200 bg-lime-50 text-lime-700"
-      : "border-slate-200 bg-white text-slate-600";
-}
-
-function getFavoriteSelectionFilter(value: string | string[] | undefined): FavoriteSelectionFilter {
-  const candidate = Array.isArray(value) ? value[0] : value;
-  return candidate === "pending" || candidate === "editing" || candidate === "delivered" ? candidate : "all";
-}
-
-function favoriteSelectionFilterLabel(filter: FavoriteSelectionFilter) {
-  return filter === "pending" ? "Pendientes" : filter === "editing" ? "En edición" : filter === "delivered" ? "Entregadas" : "Todas";
-}
-
 export default async function AlbumDetailPage({ params, searchParams }: AlbumDetailPageProps) {
   const { id } = await params;
   const resolvedSearchParams = await searchParams;
   const album = await getAdminAlbumById(id);
-  const favoriteFilter = getFavoriteSelectionFilter(resolvedSearchParams.favoriteStatus);
 
   if (!album) {
     notFound();
   }
 
-  const visibleFavoriteSelections =
-    favoriteFilter === "all"
-      ? album.favoriteSelections ?? []
-      : (album.favoriteSelections ?? []).filter((selection) => selection.status === favoriteFilter);
-
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-3 rounded-[26px] border border-slate-200 bg-white px-5 py-4 shadow-[0_12px_30px_rgba(15,23,42,0.05)]">
         <div className="flex items-center gap-3 text-sm font-bold text-slate-500">
-          <Link href="/admin/albums" className="inline-flex items-center gap-2 rounded-full border border-slate-200 px-4 py-2 transition hover:border-lime-300 hover:text-slate-900">
+          <Link href="/appfotos/admin/albums" className="inline-flex items-center gap-2 rounded-full border border-slate-200 px-4 py-2 transition hover:border-lime-300 hover:text-slate-900">
             <ArrowLeft className="size-4" />
             Volver a albumes
           </Link>
@@ -115,7 +86,7 @@ export default async function AlbumDetailPage({ params, searchParams }: AlbumDet
               </p>
             </div>
             <div className="flex flex-wrap gap-3">
-              <Link href={`/g/${album.slug}`} target="_blank" rel="noreferrer">
+              <Link href={`/appfotos/g/${album.slug}`} target="_blank" rel="noreferrer">
                 <Button variant="pink">
                   <ExternalLink className="mr-2 size-4" />
                   Ver galeria
@@ -133,7 +104,7 @@ export default async function AlbumDetailPage({ params, searchParams }: AlbumDet
               </div>
               <div className="rounded-[24px] border border-slate-200 bg-slate-50 px-5 py-4">
                 <p className="text-[11px] font-extrabold uppercase tracking-[0.24em] text-slate-400">URL publica</p>
-                <p className="mt-2 truncate text-sm font-bold text-slate-700">lakja.top/g/{album.slug}</p>
+                <p className="mt-2 truncate text-sm font-bold text-slate-700">lakja.top/appfotos/g/{album.slug}</p>
               </div>
               <div className="rounded-[24px] border border-slate-200 bg-slate-50 px-5 py-4">
                 <p className="text-[11px] font-extrabold uppercase tracking-[0.24em] text-slate-400">Listas recibidas</p>
@@ -382,49 +353,11 @@ export default async function AlbumDetailPage({ params, searchParams }: AlbumDet
             </div>
             {album.favoriteSelections && album.favoriteSelections.length > 0 ? (
               <div className="mt-4 space-y-4">
-                  <div className="flex flex-wrap items-center justify-between gap-3 rounded-[20px] border border-slate-200 bg-slate-50 px-4 py-3">
-                    <div className="flex flex-wrap gap-2">
-                      {(["all", "pending", "editing", "delivered"] as FavoriteSelectionFilter[]).map((filter) => (
-                        <Link
-                          key={filter}
-                          href={`/admin/albums/${album.id}?favoriteStatus=${filter}`}
-                          className={`inline-flex items-center rounded-full px-3 py-2 text-[10px] font-extrabold uppercase tracking-[0.14em] transition ${
-                            favoriteFilter === filter
-                              ? "bg-slate-950 text-white"
-                              : "border border-slate-200 bg-white text-slate-600 hover:border-slate-300 hover:text-slate-900"
-                          }`}
-                        >
-                          {favoriteSelectionFilterLabel(filter)}
-                        </Link>
-                      ))}
-                    </div>
-                    <div className="flex flex-wrap items-center gap-3 text-[10px] font-extrabold uppercase tracking-[0.12em] text-slate-400">
-                      <span className="inline-flex items-center gap-1.5">
-                        <TimerReset className="size-3.5" />
-                        Pendiente
-                      </span>
-                      <span className="inline-flex items-center gap-1.5">
-                        <Wand2 className="size-3.5" />
-                        Edición
-                      </span>
-                      <span className="inline-flex items-center gap-1.5">
-                        <CheckCheck className="size-3.5" />
-                        Entregado
-                      </span>
-                    </div>
-                  </div>
-                  {visibleFavoriteSelections.length > 0 ? visibleFavoriteSelections.map((selection) => (
+                  {album.favoriteSelections.map((selection) => (
                     <div key={selection.id} className="rounded-[22px] border border-slate-200 bg-slate-50 p-4">
                       <div className="flex items-start justify-between gap-3">
                         <div>
-                          <div className="flex flex-wrap items-center gap-2">
-                            <p className="font-bold text-slate-900">Lista de favoritos de {selection.clientName}</p>
-                            <span
-                              className={`inline-flex items-center rounded-full border px-3 py-1 text-[10px] font-extrabold uppercase tracking-[0.16em] ${favoriteStatusClasses(selection.status)}`}
-                            >
-                              {favoriteStatusLabel(selection.status)}
-                            </span>
-                          </div>
+                          <p className="font-bold text-slate-900">Lista de favoritos de {selection.clientName}</p>
                           <p className="mt-2 text-sm text-slate-500">
                             {selection.photoCount} foto(s) · {selection.serials.map((serial) => `#${serial}`).join(", ")}
                           </p>
@@ -433,51 +366,6 @@ export default async function AlbumDetailPage({ params, searchParams }: AlbumDet
                           </span>
                         </div>
                         <div className="flex flex-wrap justify-end gap-2">
-                          {selection.status !== "pending" ? (
-                            <form action={updateFavoriteSelectionStatusAction}>
-                              <input type="hidden" name="albumId" value={album.id} />
-                              <input type="hidden" name="selectionId" value={selection.id} />
-                              <input type="hidden" name="status" value={FavoriteSelectionStatus.PENDING} />
-                              <button
-                                type="submit"
-                                title="Marcar pendiente"
-                                aria-label="Marcar pendiente"
-                                className="inline-flex size-10 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-600 transition hover:border-slate-300 hover:text-slate-900"
-                              >
-                                <TimerReset className="size-4" />
-                              </button>
-                            </form>
-                          ) : null}
-                          {selection.status !== "editing" ? (
-                            <form action={updateFavoriteSelectionStatusAction}>
-                              <input type="hidden" name="albumId" value={album.id} />
-                              <input type="hidden" name="selectionId" value={selection.id} />
-                              <input type="hidden" name="status" value={FavoriteSelectionStatus.EDITING} />
-                              <button
-                                type="submit"
-                                title="Pasar a edición"
-                                aria-label="Pasar a edición"
-                                className="inline-flex size-10 items-center justify-center rounded-full border border-amber-200 bg-white text-amber-700 transition hover:bg-amber-50"
-                              >
-                                <Wand2 className="size-4" />
-                              </button>
-                            </form>
-                          ) : null}
-                          {selection.status !== "delivered" ? (
-                            <form action={updateFavoriteSelectionStatusAction}>
-                              <input type="hidden" name="albumId" value={album.id} />
-                              <input type="hidden" name="selectionId" value={selection.id} />
-                              <input type="hidden" name="status" value={FavoriteSelectionStatus.DELIVERED} />
-                              <button
-                                type="submit"
-                                title="Marcar entregado"
-                                aria-label="Marcar entregado"
-                                className="inline-flex size-10 items-center justify-center rounded-full border border-lime-200 bg-white text-lime-700 transition hover:bg-lime-50"
-                              >
-                                <CheckCheck className="size-4" />
-                              </button>
-                            </form>
-                          ) : null}
                           <form action={deleteFavoriteSelectionAction}>
                             <input type="hidden" name="albumId" value={album.id} />
                             <input type="hidden" name="selectionId" value={selection.id} />
@@ -501,29 +389,8 @@ export default async function AlbumDetailPage({ params, searchParams }: AlbumDet
                         <FileText className="mr-2 size-4" />
                         Descargar PDF
                       </a>
-                      <details className="mt-4 rounded-[18px] border border-slate-200 bg-white p-4">
-                        <summary className="cursor-pointer text-sm font-bold text-slate-900">
-                          Ver seleccion completa
-                        </summary>
-                        <div className="mt-4 grid grid-cols-3 gap-2 xl:grid-cols-4">
-                          {selection.photos.map((photo) => (
-                            <div key={photo.id} className="overflow-hidden rounded-[16px] border border-slate-200 bg-slate-50">
-                              <div className="aspect-square bg-cover bg-center" style={{ backgroundImage: `url(${photo.thumbUrl})` }} />
-                              <div className="space-y-1 px-2.5 py-2.5">
-                                <p className="text-[10px] font-extrabold uppercase tracking-[0.16em] text-slate-400">#{photo.serial}</p>
-                                <p className="truncate text-xs font-bold text-slate-900">{photo.platformName}</p>
-                                <p className="truncate text-[11px] text-slate-500">{photo.originalName}</p>
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      </details>
                     </div>
-                  )) : (
-                    <div className="rounded-[22px] border border-dashed border-slate-300 bg-white px-4 py-8 text-center text-sm text-slate-500">
-                      No hay listas en el filtro <span className="font-bold text-slate-700">{favoriteSelectionFilterLabel(favoriteFilter)}</span>.
-                    </div>
-                  )}
+                  ))}
               </div>
             ) : (
               <p className="mt-4 text-sm leading-7 text-slate-500">

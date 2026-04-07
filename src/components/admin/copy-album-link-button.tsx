@@ -11,7 +11,7 @@ export function CopyAlbumLinkButton({ slug }: CopyAlbumLinkButtonProps) {
   const [copied, setCopied] = useState(false);
 
   async function handleCopy() {
-    const url = `${window.location.origin}/g/${slug}`;
+    const url = `${window.location.origin}/appfotos/g/${slug}`;
     await navigator.clipboard.writeText(url);
     setCopied(true);
     window.setTimeout(() => setCopied(false), 1800);

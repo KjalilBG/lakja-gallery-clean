@@ -106,7 +106,7 @@ export function AlbumPhotoWorkspace({ albumId, slug, photos, bibRecognitionEnabl
       }
 
       setSelectedIds([]);
-      router.push(`/admin/albums/${albumId}?${successQuery}`);
+      router.push(`/appfotos/admin/albums/${albumId}?${successQuery}`);
       router.refresh();
     } finally {
       setIsMutating(false);

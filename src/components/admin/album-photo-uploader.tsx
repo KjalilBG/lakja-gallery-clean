@@ -88,7 +88,7 @@ export function AlbumPhotoUploader({ albumId }: AlbumPhotoUploaderProps) {
       setPhase("processing");
       setProgress(100);
       setQueuedFiles((current) => current.map((item) => ({ ...item, status: "done", progress: 100, error: undefined })));
-      router.push(`/admin/albums/${albumId}?uploaded=1`);
+      router.push(`/appfotos/admin/albums/${albumId}?uploaded=1`);
       router.refresh();
     } catch (error) {
       setUploadError(error instanceof Error ? error.message : "No se pudieron subir las fotos.");
