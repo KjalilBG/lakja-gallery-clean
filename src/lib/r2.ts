@@ -14,6 +14,7 @@ import {
 const accountId = process.env.R2_ACCOUNT_ID ?? "";
 const accessKeyId = process.env.R2_ACCESS_KEY_ID ?? "";
 const secretAccessKey = process.env.R2_SECRET_ACCESS_KEY ?? "";
+const publicBaseUrl = process.env.R2_PUBLIC_BASE_URL?.trim().replace(/\/$/, "") ?? "";
 
 export const r2Buckets = {
   originals: process.env.R2_BUCKET_ORIGINALS ?? "lakja-originals",
@@ -51,6 +52,13 @@ export function buildR2StorageKey(bucket: BucketKind, key: string) {
   return `r2://${r2Buckets[bucket]}/${key}`;
 }
 
+function encodeStorageKey(key: string) {
+  return key
+    .split("/")
+    .map((segment) => encodeURIComponent(segment))
+    .join("/");
+}
+
 export function parseStorageKey(input: string) {
   if (!input.startsWith("r2://")) {
     return null;
@@ -69,16 +77,37 @@ export function parseStorageKey(input: string) {
   };
 }
 
+export function hasPublicR2BaseUrl() {
+  return Boolean(publicBaseUrl);
+}
+
+export function toPublicMediaUrl(input: string) {
+  const parsed = parseStorageKey(input);
+
+  if (!parsed || !publicBaseUrl) {
+    return null;
+  }
+
+  const bucketAwareBaseUrl = publicBaseUrl.includes("{bucket}")
+    ? publicBaseUrl.replace("{bucket}", encodeURIComponent(parsed.bucket))
+    : `${publicBaseUrl}/${encodeURIComponent(parsed.bucket)}`;
+
+  return `${bucketAwareBaseUrl}/${encodeStorageKey(parsed.key)}`;
+}
+
 export function toMediaRoute(input: string) {
+  const publicUrl = toPublicMediaUrl(input);
+
+  if (publicUrl) {
+    return publicUrl;
+  }
+
   const parsed = parseStorageKey(input);
   if (!parsed) {
     return input;
   }
 
-  return `/api/media/${encodeURIComponent(parsed.bucket)}/${parsed.key
-    .split("/")
-    .map((segment) => encodeURIComponent(segment))
-    .join("/")}`;
+  return `/api/media/${encodeURIComponent(parsed.bucket)}/${encodeStorageKey(parsed.key)}`;
 }
 
 export async function uploadToR2(params: {

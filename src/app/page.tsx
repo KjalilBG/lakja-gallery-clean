@@ -7,7 +7,7 @@ import { SiteMaintenanceState } from "@/components/site/site-maintenance-state";
 import { getHomepageAlbums, getPublishedShowcasePhotos } from "@/lib/albums";
 import { getSiteSettings } from "@/lib/site-settings";
 
-export const dynamic = "force-dynamic";
+export const revalidate = 60;
 
 export default async function HomePage() {
   const settings = await getSiteSettings();

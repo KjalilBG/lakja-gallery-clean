@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 
 import { checkRateLimit } from "@/lib/rate-limit";
-import { isAllowedR2BucketName, readFromR2 } from "@/lib/r2";
+import { hasPublicR2BaseUrl, isAllowedR2BucketName, readFromR2, toPublicMediaUrl } from "@/lib/r2";
 import { sanitizeStoragePath, sanitizeTextInput } from "@/lib/sanitize";
 
 type MediaRouteContext = {
@@ -32,6 +32,16 @@ export async function GET(request: Request, context: MediaRouteContext) {
   }
 
   const storageKey = `r2://${sanitizedBucket}/${sanitizedKey}`;
+  const publicUrl = hasPublicR2BaseUrl() ? toPublicMediaUrl(storageKey) : null;
+
+  if (publicUrl) {
+    return NextResponse.redirect(publicUrl, {
+      status: 308,
+      headers: {
+        "Cache-Control": "public, s-maxage=31536000, max-age=31536000, immutable"
+      }
+    });
+  }
 
   try {
     const file = await readFromR2(storageKey);
@@ -39,7 +49,7 @@ export async function GET(request: Request, context: MediaRouteContext) {
     return new NextResponse(new Uint8Array(file.body), {
       headers: {
         "Content-Type": file.contentType,
-        "Cache-Control": "public, max-age=31536000, immutable"
+        "Cache-Control": "public, s-maxage=31536000, max-age=31536000, immutable"
       }
     });
   } catch {
