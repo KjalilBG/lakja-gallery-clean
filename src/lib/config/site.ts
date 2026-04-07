@@ -27,7 +27,8 @@ export const siteConfig = {
     "Estamos afinando una nueva casa digital para entregar historias, retratos y eventos con una experiencia mucho más cuidada. Mientras tanto, ya puedes recorrer las galerías publicadas, sentir el estilo de La Kja y escribirme si quieres crear algo juntos.",
   handle: "@lakja.top",
   nav: [
-    { label: "Galerias", href: "/#galerias" },
+    { label: "Inicio", href: "/" },
+    { label: "AppFotos", href: "/appfotos" },
     { label: "Admin", href: "/admin" }
   ],
   socials: [

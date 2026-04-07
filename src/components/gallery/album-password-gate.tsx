@@ -41,7 +41,7 @@ export function AlbumPasswordGate({ slug, hasError = false }: AlbumPasswordGateP
         </form>
 
         <div className="mt-4">
-          <Link href="/">
+          <Link href="/appfotos">
             <Button variant="ghost">Volver</Button>
           </Link>
         </div>
