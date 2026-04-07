@@ -5,7 +5,7 @@ import { z } from "zod";
 
 import { ensureAdminApiRequest } from "@/lib/auth-guard";
 import { checkRateLimit, getSafeErrorMessage } from "@/lib/rate-limit";
-import { buildR2StorageKey, isR2Configured } from "@/lib/r2";
+import { createMultipartUpload, isR2Configured } from "@/lib/r2";
 import { assertValidImageUpload, MAX_PHOTO_CHUNK_SIZE_BYTES } from "@/lib/upload-security";
 
 export const maxDuration = 60;
@@ -38,7 +38,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
 
   const rateLimitResponse = checkRateLimit(request, {
     label: "admin-upload-multipart-init",
-    maxRequests: 40,
+    maxRequests: 300,
     windowMs: 60 * 1000
   });
   if (rateLimitResponse) return rateLimitResponse;
@@ -64,13 +64,16 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     const safeName = sanitizeFileName(body.fileName);
     const uniqueBaseName = `${Date.now()}-${crypto.randomUUID()}-${path.parse(safeName).name}`;
     const objectKey = `albums/${body.albumId}/originals/${uniqueBaseName}${path.extname(safeName) || ".jpg"}`;
-    const uploadId = crypto.randomUUID();
+    const uploadId = await createMultipartUpload({
+      bucket: "originals",
+      key: objectKey,
+      contentType: body.contentType
+    });
 
     return NextResponse.json({
       ok: true,
       uploadId,
       objectKey,
-      storageKey: buildR2StorageKey("originals", objectKey),
       chunkSizeBytes: MAX_PHOTO_CHUNK_SIZE_BYTES
     });
   } catch (error) {

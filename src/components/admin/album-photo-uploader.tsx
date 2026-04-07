@@ -92,7 +92,6 @@ export function AlbumPhotoUploader({ albumId }: AlbumPhotoUploaderProps) {
       router.refresh();
     } catch (error) {
       setUploadError(error instanceof Error ? error.message : "No se pudieron subir las fotos.");
-      setProgress(0);
       setPhase("idle");
       setBatchLabel("");
       setIsUploading(false);
@@ -113,7 +112,7 @@ export function AlbumPhotoUploader({ albumId }: AlbumPhotoUploaderProps) {
     phase === "processing"
       ? "La foto actual ya termino de enviarse. Ahora estamos guardando, optimizando y ordenando las fotos."
       : queuedFiles.length > 1
-        ? `Las fotos se enviaran una por una para que la subida sea mas estable. Maximo ${MAX_FILES_PER_REQUEST} por peticion.`
+        ? `La carga se hace con bloques optimizados para que el navegador y el servidor trabajen con menos esperas. Flujo actual: ${MAX_FILES_PER_REQUEST} foto(s) a la vez.`
         : "El porcentaje llegara al 100% solo cuando las fotos esten listas dentro del album.";
 
   return (

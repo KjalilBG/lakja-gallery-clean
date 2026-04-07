@@ -140,6 +140,46 @@ async function normalizeAlbumPhotoOrder(albumId: string) {
   );
 }
 
+async function getNextAlbumPhotoSortOrder(albumId: string) {
+  const result = await prisma.photo.aggregate({
+    where: { albumId },
+    _max: {
+      sortOrder: true
+    }
+  });
+
+  return (result._max.sortOrder ?? -1) + 1;
+}
+
+export async function reserveAlbumPhotoSortOrders(albumId: string, totalFiles: number) {
+  if (!Number.isInteger(totalFiles) || totalFiles <= 0) {
+    throw new Error("La cantidad de fotos a reservar no es valida.");
+  }
+
+  return prisma.$transaction(async (tx) => {
+    await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtext(${albumId}))`;
+
+    const album = await tx.album.findUnique({
+      where: { id: albumId },
+      select: { id: true }
+    });
+
+    if (!album) {
+      throw new Error("El album no existe.");
+    }
+
+    const result = await tx.photo.aggregate({
+      where: { albumId },
+      _max: {
+        sortOrder: true
+      }
+    });
+
+    const startSortOrder = (result._max.sortOrder ?? -1) + 1;
+    return Array.from({ length: totalFiles }, (_, index) => startSortOrder + index);
+  });
+}
+
 async function extractCapturedAt(buffer: Buffer, fallbackTimestamp: number) {
   try {
     const metadata = await exifr.parse(buffer, ["DateTimeOriginal", "CreateDate", "ModifyDate"]);
@@ -1522,6 +1562,7 @@ export async function saveAlbumPhotoFromStorage(input: {
   sizeBytes: number;
   contentType?: string;
   lastModified?: number;
+  sortOrder?: number;
 }) {
   if (!input.originalStorageKey.startsWith("r2://")) {
     throw new Error("La foto cargada no se encontro en R2.");
@@ -1534,6 +1575,12 @@ export async function saveAlbumPhotoFromStorage(input: {
   }
 
   const { body, contentType } = await readFromR2(input.originalStorageKey);
+
+  if (body.byteLength !== input.sizeBytes) {
+    throw new Error("La foto cargada no coincide con el tamano esperado.");
+  }
+
+  const nextSortOrder = typeof input.sortOrder === "number" ? input.sortOrder : await getNextAlbumPhotoSortOrder(input.albumId);
   const derivatives = await buildImageDerivatives({
     buffer: body,
     fileName: input.filename,
@@ -1543,21 +1590,25 @@ export async function saveAlbumPhotoFromStorage(input: {
   const previewObjectKey = `albums/${input.albumId}/previews/${uniqueBaseName}-preview${derivatives.previewExtension}`;
   const thumbObjectKey = `albums/${input.albumId}/thumbs/${uniqueBaseName}-thumb${derivatives.thumbExtension}`;
 
-  const previewKey = await uploadToR2({
-    bucket: "derivatives",
-    key: previewObjectKey,
-    body: derivatives.previewBuffer,
-    contentType: derivatives.previewContentType
-  });
-
-  const thumbKey = await uploadToR2({
-    bucket: "derivatives",
-    key: thumbObjectKey,
-    body: derivatives.thumbBuffer,
-    contentType: derivatives.thumbContentType
-  });
-
-  const capturedAt = await extractCapturedAt(body, input.lastModified ?? 0);
+  const [previewKey, thumbKey, capturedAt, album] = await Promise.all([
+    uploadToR2({
+      bucket: "derivatives",
+      key: previewObjectKey,
+      body: derivatives.previewBuffer,
+      contentType: derivatives.previewContentType
+    }),
+    uploadToR2({
+      bucket: "derivatives",
+      key: thumbObjectKey,
+      body: derivatives.thumbBuffer,
+      contentType: derivatives.thumbContentType
+    }),
+    extractCapturedAt(body, input.lastModified ?? 0),
+    prisma.album.findUnique({
+      where: { id: input.albumId },
+      select: { coverPhotoId: true }
+    })
+  ]);
 
   const photo = await prisma.photo.create({
     data: {
@@ -1570,22 +1621,15 @@ export async function saveAlbumPhotoFromStorage(input: {
       width: derivatives.width,
       height: derivatives.height,
       sizeBytes: input.sizeBytes,
-      sortOrder: 0,
+      sortOrder: nextSortOrder,
       status: "READY"
     }
   });
 
-  await normalizeAlbumPhotoOrder(input.albumId);
-
-  const album = await prisma.album.findUnique({
-    where: { id: input.albumId },
-    select: { coverPhotoId: true, photos: { orderBy: { sortOrder: "asc" }, select: { id: true } } }
-  });
-
-  if (!album?.coverPhotoId && album?.photos[0]) {
+  if (!album?.coverPhotoId) {
     await prisma.album.update({
       where: { id: input.albumId },
-      data: { coverPhotoId: album.photos[0].id }
+      data: { coverPhotoId: photo.id }
     });
   }
 

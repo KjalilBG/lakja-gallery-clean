@@ -3,7 +3,7 @@ import { z } from "zod";
 
 import { ensureAdminApiRequest } from "@/lib/auth-guard";
 import { checkRateLimit, getSafeErrorMessage } from "@/lib/rate-limit";
-import { buildR2StorageKey, isR2Configured, uploadToR2 } from "@/lib/r2";
+import { isR2Configured, uploadMultipartPart } from "@/lib/r2";
 import { MAX_PHOTO_CHUNK_SIZE_BYTES } from "@/lib/upload-security";
 
 export const maxDuration = 60;
@@ -21,7 +21,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
 
   const rateLimitResponse = checkRateLimit(request, {
     label: "admin-upload-multipart-part",
-    maxRequests: 240,
+    maxRequests: 3000,
     windowMs: 60 * 1000
   });
   if (rateLimitResponse) return rateLimitResponse;
@@ -54,16 +54,15 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       return NextResponse.json({ ok: false, error: "El fragmento excede el limite permitido." }, { status: 400 });
     }
 
-    const chunkKey = `tmp/${body.albumId}/${body.uploadId}/${String(body.partNumber).padStart(4, "0")}.part`;
-
-    await uploadToR2({
+    const etag = await uploadMultipartPart({
       bucket: "originals",
-      key: chunkKey,
+      key: body.objectKey,
+      uploadId: body.uploadId,
+      partNumber: body.partNumber,
       body: Buffer.from(await chunk.arrayBuffer()),
-      contentType: "application/octet-stream"
     });
 
-    return NextResponse.json({ ok: true, chunkKey: buildR2StorageKey("originals", chunkKey) });
+    return NextResponse.json({ ok: true, etag });
   } catch (error) {
     return NextResponse.json(
       { ok: false, error: getSafeErrorMessage("No se pudo subir el fragmento.", error) },

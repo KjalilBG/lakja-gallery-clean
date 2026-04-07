@@ -1,6 +1,7 @@
 "use client";
 
-export const MAX_FILES_PER_REQUEST = 1;
+export const MAX_PARALLEL_UPLOADS = 3;
+export const MAX_FILES_PER_REQUEST = MAX_PARALLEL_UPLOADS;
 
 export type UploadQueuePhase = "queued" | "uploading" | "processing" | "done" | "error";
 
@@ -24,13 +25,17 @@ type MultipartInitResponse = {
   ok: true;
   uploadId: string;
   objectKey: string;
-  storageKey: string;
   chunkSizeBytes: number;
 };
 
 type MultipartPart = {
   partNumber: number;
-  chunkKey: string;
+  etag: string;
+};
+
+type SortOrderReservationResponse = {
+  ok: true;
+  sortOrders: number[];
 };
 
 async function uploadSinglePhotoThroughProxy(params: {
@@ -38,14 +43,19 @@ async function uploadSinglePhotoThroughProxy(params: {
   item: UploadQueueItem;
   fileIndex: number;
   totalFiles: number;
+  sortOrder?: number;
   onProgress?: (progress: UploadBatchProgress) => void;
 }) {
-  const { albumId, item, fileIndex, totalFiles, onProgress } = params;
+  const { albumId, item, fileIndex, totalFiles, sortOrder, onProgress } = params;
 
   await new Promise<void>((resolve, reject) => {
     const formData = new FormData();
     formData.append("albumId", albumId);
     formData.append("photos", item.file);
+
+    if (typeof sortOrder === "number") {
+      formData.append("sortOrder", String(sortOrder));
+    }
 
     const request = new XMLHttpRequest();
     request.open("POST", `/api/admin/albums/${albumId}/photos/upload`);
@@ -184,14 +194,14 @@ async function uploadChunk(params: {
 
     request.onload = () => {
       if (request.status >= 200 && request.status < 300) {
-        const response = JSON.parse(request.responseText) as { chunkKey?: string };
+        const response = JSON.parse(request.responseText) as { etag?: string };
 
-        if (!response.chunkKey) {
+        if (!response.etag) {
           reject(new Error(`R2 no confirmo el fragmento de ${item.file.name}.`));
           return;
         }
 
-        resolve(response.chunkKey);
+        resolve(response.etag);
         return;
       }
 
@@ -208,9 +218,10 @@ async function uploadSinglePhotoMultipart(params: {
   item: UploadQueueItem;
   fileIndex: number;
   totalFiles: number;
+  sortOrder?: number;
   onProgress?: (progress: UploadBatchProgress) => void;
 }) {
-  const { albumId, item, fileIndex, totalFiles, onProgress } = params;
+  const { albumId, item, fileIndex, totalFiles, sortOrder, onProgress } = params;
   const initResponse = await fetch(`/api/admin/albums/${albumId}/photos/multipart/init`, {
     method: "POST",
     headers: {
@@ -239,7 +250,7 @@ async function uploadSinglePhotoMultipart(params: {
 
   for (let offset = 0, partNumber = 1; offset < item.file.size; offset += chunkSize, partNumber += 1) {
     const chunk = item.file.slice(offset, Math.min(item.file.size, offset + chunkSize));
-    const chunkKey = await uploadChunk({
+    const etag = await uploadChunk({
       albumId,
       uploadId: initData.uploadId,
       objectKey: initData.objectKey,
@@ -254,7 +265,7 @@ async function uploadSinglePhotoMultipart(params: {
     });
 
     uploadedBytes += chunk.size;
-    parts.push({ partNumber, chunkKey });
+    parts.push({ partNumber, etag });
   }
 
   onProgress?.({
@@ -276,11 +287,11 @@ async function uploadSinglePhotoMultipart(params: {
       albumId,
       uploadId: initData.uploadId,
       objectKey: initData.objectKey,
-      storageKey: initData.storageKey,
       fileName: item.file.name,
       sizeBytes: item.file.size,
       contentType: item.file.type,
       lastModified: item.file.lastModified,
+      sortOrder,
       parts
     })
   });
@@ -301,6 +312,39 @@ async function uploadSinglePhotoMultipart(params: {
   });
 }
 
+async function reservePhotoSortOrders(albumId: string, totalFiles: number) {
+  const response = await fetch(`/api/admin/albums/${albumId}/photos/multipart/reserve`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({
+      albumId,
+      totalFiles
+    })
+  });
+
+  if (!response.ok) {
+    const errorResponse = (await response.json().catch(() => null)) as { error?: string } | null;
+    throw new Error(errorResponse?.error || "No se pudo reservar el orden de las fotos.");
+  }
+
+  const data = (await response.json()) as SortOrderReservationResponse;
+
+  if (!Array.isArray(data.sortOrders) || data.sortOrders.length !== totalFiles) {
+    throw new Error("La reserva de orden no devolvio la cantidad esperada.");
+  }
+
+  return data.sortOrders;
+}
+
+function calculateOverallPercent(filePercents: number[]) {
+  if (filePercents.length === 0) return 0;
+
+  const totalPercent = filePercents.reduce((sum, value) => sum + value, 0);
+  return Math.max(0, Math.min(100, Math.round(totalPercent / filePercents.length)));
+}
+
 export async function uploadPhotoBatches({
   albumId,
   files,
@@ -311,34 +355,50 @@ export async function uploadPhotoBatches({
   onProgress?: (progress: UploadBatchProgress) => void;
 }) {
   const totalFiles = files.length;
+  const reservedSortOrders = await reservePhotoSortOrders(albumId, totalFiles);
+  const filePercents = new Array<number>(totalFiles).fill(0);
+  const failures: string[] = [];
+  let nextFileIndex = 0;
 
-  for (let fileIndex = 0; fileIndex < files.length; fileIndex += MAX_FILES_PER_REQUEST) {
-    const currentItem = files[fileIndex];
+  async function runWorker() {
+    while (nextFileIndex < totalFiles) {
+      const currentIndex = nextFileIndex;
+      nextFileIndex += 1;
 
-    try {
-      await uploadSinglePhotoMultipart({
-        albumId,
-        item: currentItem,
-        fileIndex,
-        totalFiles,
-        onProgress
-      });
-    } catch (error) {
-      const message = error instanceof Error ? error.message : `No se pudo completar ${currentItem.file.name}.`;
+      const currentItem = files[currentIndex];
 
-      onProgress?.({
-        fileId: currentItem.id,
-        fileName: currentItem.file.name,
-        fileIndex: fileIndex + 1,
-        totalFiles,
-        overallPercent: Math.round((fileIndex / totalFiles) * 100),
-        filePercent: 0,
-        phase: "error",
-        error: message
-      });
+      try {
+        await uploadSinglePhotoMultipart({
+          albumId,
+          item: currentItem,
+          fileIndex: currentIndex,
+          totalFiles,
+          sortOrder: reservedSortOrders[currentIndex],
+          onProgress: (progress) => {
+            filePercents[currentIndex] = progress.filePercent;
 
-      throw new Error(message);
+            onProgress?.({
+              ...progress,
+              overallPercent: calculateOverallPercent(filePercents)
+            });
+          }
+        });
+      } catch (error) {
+        const message = error instanceof Error ? error.message : `No se pudo completar ${currentItem.file.name}.`;
+        failures.push(message);
+      }
     }
+  }
+
+  const workers = Array.from({ length: Math.min(MAX_PARALLEL_UPLOADS, totalFiles) }, () => runWorker());
+  await Promise.all(workers);
+
+  if (failures.length > 0) {
+    if (failures.length === 1) {
+      throw new Error(failures[0]);
+    }
+
+    throw new Error(`${failures.length} foto(s) no se pudieron subir. Revisa la cola para ver cuales fallaron.`);
   }
 
   return { totalFiles };

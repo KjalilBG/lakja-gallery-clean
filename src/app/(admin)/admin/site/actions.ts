@@ -45,6 +45,7 @@ export async function saveSiteSettingsAction(formData: FormData) {
   await requireSuperAdminSession("/admin/site");
 
   const currentSettings = await getSiteSettings();
+  const activeTab = String(formData.get("tab") ?? "general");
 
   function getTextValue(name: string, fallback: string) {
     const rawValue = formData.get(name);
@@ -60,7 +61,10 @@ export async function saveSiteSettingsAction(formData: FormData) {
       return fallback;
     }
 
-    return formData.get(name) === "on";
+    return formData
+      .getAll(name)
+      .map((value) => String(value).toLowerCase())
+      .some((value) => value === "on" || value === "true");
   }
 
   const featuredAlbumIds = formData.getAll("featuredAlbumIds");
@@ -81,10 +85,9 @@ export async function saveSiteSettingsAction(formData: FormData) {
     homeEyebrow: getTextValue("homeEyebrow", currentSettings.homeEyebrow),
     homeTitle: getTextValue("homeTitle", currentSettings.homeTitle),
     homeDescription: getTextValue("homeDescription", currentSettings.homeDescription),
-    featuredAlbumIds:
-      featuredAlbumIds.length > 0
-        ? featuredAlbumIds.map((value) => String(value).trim()).filter(Boolean)
-        : currentSettings.featuredAlbumIds,
+    featuredAlbumIds: formData.has("featuredAlbumIdsIntent")
+      ? featuredAlbumIds.map((value) => String(value).trim()).filter(Boolean)
+      : currentSettings.featuredAlbumIds,
     maintenanceMode: getCheckboxValue("maintenanceMode", currentSettings.maintenanceMode),
     showWhatsAppFloat: getCheckboxValue("showWhatsAppFloat", currentSettings.showWhatsAppFloat),
     downloadsEnabled: getCheckboxValue("downloadsEnabled", currentSettings.downloadsEnabled),
@@ -123,7 +126,8 @@ export async function saveSiteSettingsAction(formData: FormData) {
 
   revalidatePath("/", "layout");
   revalidatePath("/");
+  revalidatePath("/g/[slug]", "page");
   revalidatePath("/admin/site");
 
-  redirect("/admin/site?saved=1");
+  redirect(`/admin/site?tab=${encodeURIComponent(activeTab)}&saved=1`);
 }
