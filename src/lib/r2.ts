@@ -90,7 +90,9 @@ export function toPublicMediaUrl(input: string) {
 
   const bucketAwareBaseUrl = publicBaseUrl.includes("{bucket}")
     ? publicBaseUrl.replace("{bucket}", encodeURIComponent(parsed.bucket))
-    : `${publicBaseUrl}/${encodeURIComponent(parsed.bucket)}`;
+    : /\.(r2\.dev|r2\.cloudflarestorage\.com)$/i.test(new URL(publicBaseUrl).hostname)
+      ? publicBaseUrl
+      : `${publicBaseUrl}/${encodeURIComponent(parsed.bucket)}`;
 
   return `${bucketAwareBaseUrl}/${encodeStorageKey(parsed.key)}`;
 }
