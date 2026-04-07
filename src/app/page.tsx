@@ -1,8 +1,8 @@
 import Link from "next/link";
-import Image from "next/image";
 import { ArrowRight, Facebook, Instagram, Sparkles } from "lucide-react";
 
 import { HomeContactCard } from "@/components/home/home-contact-card";
+import { HomePhotoCarousel } from "@/components/home/home-photo-carousel";
 import { LogoMark } from "@/components/ui/logo";
 import { getPublishedShowcasePhotos } from "@/lib/albums";
 import { getSiteSettings } from "@/lib/site-settings";
@@ -13,9 +13,9 @@ export default async function HomePage() {
   const [settings, showcasePhotos] = await Promise.all([getSiteSettings(), getPublishedShowcasePhotos(12)]);
   const featuredPhotos = showcasePhotos
     .filter((photo, index, photos) => photos.findIndex((candidate) => candidate.slug === photo.slug) === index)
-    .slice(0, 3);
-  const fallbackPhotos = showcasePhotos.slice(0, 3);
-  const galleryPhotos = featuredPhotos.length === 3 ? featuredPhotos : fallbackPhotos;
+    .slice(0, 5);
+  const fallbackPhotos = showcasePhotos.slice(0, 5);
+  const galleryPhotos = featuredPhotos.length >= 3 ? featuredPhotos : fallbackPhotos;
 
   return (
     <div className="space-y-12 pb-10 pt-6 md:space-y-16 md:pt-10">
@@ -65,41 +65,7 @@ export default async function HomePage() {
       </section>
 
       <section className="grid gap-6 lg:grid-cols-[1.05fr_0.95fr]">
-        <div className="grid gap-4 sm:grid-cols-2">
-          <div className="relative min-h-[240px] overflow-hidden rounded-[30px] border border-fuchsia-100 bg-white shadow-[0_16px_40px_rgba(15,23,42,0.06)] sm:row-span-2">
-            {galleryPhotos[0] ? (
-              <Image
-                src={galleryPhotos[0].imageUrl}
-                alt={galleryPhotos[0].title}
-                fill
-                sizes="(max-width: 768px) 100vw, 50vw"
-                className="object-cover"
-              />
-            ) : null}
-          </div>
-          <div className="relative min-h-[180px] overflow-hidden rounded-[30px] border border-fuchsia-100 bg-white shadow-[0_16px_40px_rgba(15,23,42,0.06)]">
-            {galleryPhotos[1] ? (
-              <Image
-                src={galleryPhotos[1].imageUrl}
-                alt={galleryPhotos[1].title}
-                fill
-                sizes="(max-width: 768px) 100vw, 25vw"
-                className="object-cover"
-              />
-            ) : null}
-          </div>
-          <div className="relative min-h-[180px] overflow-hidden rounded-[30px] border border-fuchsia-100 bg-white shadow-[0_16px_40px_rgba(15,23,42,0.06)]">
-            {galleryPhotos[2] ? (
-              <Image
-                src={galleryPhotos[2].imageUrl}
-                alt={galleryPhotos[2].title}
-                fill
-                sizes="(max-width: 768px) 100vw, 25vw"
-                className="object-cover"
-              />
-            ) : null}
-          </div>
-        </div>
+        <HomePhotoCarousel photos={galleryPhotos} />
 
         <HomeContactCard whatsappNumber={settings.whatsappNumber} />
       </section>
