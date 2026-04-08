@@ -2,12 +2,16 @@
 
 export const MAX_PARALLEL_UPLOADS = 3;
 export const MAX_FILES_PER_REQUEST = MAX_PARALLEL_UPLOADS;
+const MAX_UPLOAD_RETRIES = 2;
+const RETRY_DELAY_MS = 1200;
 
 export type UploadQueuePhase = "queued" | "uploading" | "processing" | "done" | "error";
 
 export type UploadQueueItem = {
   id: string;
   file: File;
+  sortOrder?: number;
+  status?: UploadQueuePhase;
 };
 
 export type UploadBatchProgress = {
@@ -38,6 +42,38 @@ type SortOrderReservationResponse = {
   sortOrders: number[];
 };
 
+export type UploadBatchResult = {
+  totalFiles: number;
+  completedCount: number;
+  failedCount: number;
+  failures: Array<{ fileId: string; fileName: string; message: string }>;
+  reservedSortOrders: Record<string, number>;
+};
+
+function wait(ms: number) {
+  return new Promise((resolve) => window.setTimeout(resolve, ms));
+}
+
+async function retryOperation<T>(operation: () => Promise<T>) {
+  let lastError: unknown;
+
+  for (let attempt = 0; attempt <= MAX_UPLOAD_RETRIES; attempt += 1) {
+    try {
+      return await operation();
+    } catch (error) {
+      lastError = error;
+
+      if (attempt === MAX_UPLOAD_RETRIES) {
+        break;
+      }
+
+      await wait(RETRY_DELAY_MS * (attempt + 1));
+    }
+  }
+
+  throw lastError instanceof Error ? lastError : new Error("La operacion de subida fallo.");
+}
+
 async function uploadSinglePhotoThroughProxy(params: {
   albumId: string;
   item: UploadQueueItem;
@@ -48,7 +84,9 @@ async function uploadSinglePhotoThroughProxy(params: {
 }) {
   const { albumId, item, fileIndex, totalFiles, sortOrder, onProgress } = params;
 
-  await new Promise<void>((resolve, reject) => {
+  await retryOperation(
+    () =>
+      new Promise<void>((resolve, reject) => {
     const formData = new FormData();
     formData.append("albumId", albumId);
     formData.append("photos", item.file);
@@ -132,8 +170,9 @@ async function uploadSinglePhotoThroughProxy(params: {
       reject(new Error(error));
     };
 
-    request.send(formData);
-  });
+        request.send(formData);
+      })
+  );
 }
 
 async function uploadChunk(params: {
@@ -163,7 +202,9 @@ async function uploadChunk(params: {
     onProgress
   } = params;
 
-  return new Promise<string>((resolve, reject) => {
+  return retryOperation(
+    () =>
+      new Promise<string>((resolve, reject) => {
     const formData = new FormData();
     formData.append("albumId", albumId);
     formData.append("uploadId", uploadId);
@@ -209,8 +250,9 @@ async function uploadChunk(params: {
     };
 
     request.onerror = () => reject(new Error(`Fallo la carga de ${item.file.name}.`));
-    request.send(formData);
-  });
+        request.send(formData);
+      })
+  );
 }
 
 async function uploadSinglePhotoMultipart(params: {
@@ -222,18 +264,20 @@ async function uploadSinglePhotoMultipart(params: {
   onProgress?: (progress: UploadBatchProgress) => void;
 }) {
   const { albumId, item, fileIndex, totalFiles, sortOrder, onProgress } = params;
-  const initResponse = await fetch(`/api/admin/albums/${albumId}/photos/multipart/init`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json"
-    },
-    body: JSON.stringify({
-      albumId,
-      fileName: item.file.name,
-      contentType: item.file.type,
-      sizeBytes: item.file.size
+  const initResponse = await retryOperation(() =>
+    fetch(`/api/admin/albums/${albumId}/photos/multipart/init`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        albumId,
+        fileName: item.file.name,
+        contentType: item.file.type,
+        sizeBytes: item.file.size
+      })
     })
-  });
+  );
 
   if (initResponse.status === 501) {
     return uploadSinglePhotoThroughProxy(params);
@@ -278,23 +322,25 @@ async function uploadSinglePhotoMultipart(params: {
     phase: "processing"
   });
 
-  const finalizeResponse = await fetch(`/api/admin/albums/${albumId}/photos/multipart/complete`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json"
-    },
-    body: JSON.stringify({
-      albumId,
-      uploadId: initData.uploadId,
-      objectKey: initData.objectKey,
-      fileName: item.file.name,
-      sizeBytes: item.file.size,
-      contentType: item.file.type,
-      lastModified: item.file.lastModified,
-      sortOrder,
-      parts
+  const finalizeResponse = await retryOperation(() =>
+    fetch(`/api/admin/albums/${albumId}/photos/multipart/complete`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        albumId,
+        uploadId: initData.uploadId,
+        objectKey: initData.objectKey,
+        fileName: item.file.name,
+        sizeBytes: item.file.size,
+        contentType: item.file.type,
+        lastModified: item.file.lastModified,
+        sortOrder,
+        parts
+      })
     })
-  });
+  );
 
   if (!finalizeResponse.ok) {
     const errorResponse = (await finalizeResponse.json().catch(() => null)) as { error?: string } | null;
@@ -348,34 +394,60 @@ function calculateOverallPercent(filePercents: number[]) {
 export async function uploadPhotoBatches({
   albumId,
   files,
-  onProgress
+  onProgress,
+  onReservedSortOrders
 }: {
   albumId: string;
   files: UploadQueueItem[];
   onProgress?: (progress: UploadBatchProgress) => void;
+  onReservedSortOrders?: (reserved: Record<string, number>) => void;
 }) {
+  const uploadableItems = files.filter((item) => item.status !== "done");
   const totalFiles = files.length;
-  const reservedSortOrders = await reservePhotoSortOrders(albumId, totalFiles);
+  const missingSortOrderItems = uploadableItems.filter((item) => typeof item.sortOrder !== "number");
+  const newlyReservedSortOrders =
+    missingSortOrderItems.length > 0 ? await reservePhotoSortOrders(albumId, missingSortOrderItems.length) : [];
+  const reservedSortOrders = new Map<string, number>();
+
+  let reservationIndex = 0;
+  for (const item of files) {
+    if (typeof item.sortOrder === "number") {
+      reservedSortOrders.set(item.id, item.sortOrder);
+      continue;
+    }
+
+    if (reservationIndex < newlyReservedSortOrders.length) {
+      reservedSortOrders.set(item.id, newlyReservedSortOrders[reservationIndex]);
+      reservationIndex += 1;
+    }
+  }
+
+  const reservedSortOrderRecord = Object.fromEntries(reservedSortOrders.entries());
+  onReservedSortOrders?.(reservedSortOrderRecord);
+
   const filePercents = new Array<number>(totalFiles).fill(0);
-  const failures: string[] = [];
+  const failures: Array<{ fileId: string; fileName: string; message: string }> = [];
+  let completedCount = files.filter((item) => item.status === "done").length;
   let nextFileIndex = 0;
 
   async function runWorker() {
-    while (nextFileIndex < totalFiles) {
+    while (nextFileIndex < uploadableItems.length) {
       const currentIndex = nextFileIndex;
       nextFileIndex += 1;
 
-      const currentItem = files[currentIndex];
+      const currentItem = uploadableItems[currentIndex];
+      const originalIndex = files.findIndex((item) => item.id === currentItem.id);
+      const progressIndex = originalIndex >= 0 ? originalIndex : currentIndex;
 
       try {
         await uploadSinglePhotoMultipart({
           albumId,
           item: currentItem,
-          fileIndex: currentIndex,
+          fileIndex: progressIndex,
           totalFiles,
-          sortOrder: reservedSortOrders[currentIndex],
+          sortOrder: reservedSortOrders.get(currentItem.id),
           onProgress: (progress) => {
-            filePercents[currentIndex] = progress.filePercent;
+            filePercents[progressIndex] = progress.filePercent;
 
             onProgress?.({
               ...progress,
@@ -383,23 +455,36 @@ export async function uploadPhotoBatches({
             });
           }
         });
+        completedCount += 1;
       } catch (error) {
         const message = error instanceof Error ? error.message : `No se pudo completar ${currentItem.file.name}.`;
-        failures.push(message);
+        failures.push({
+          fileId: currentItem.id,
+          fileName: currentItem.file.name,
+          message
+        });
+        onProgress?.({
+          fileId: currentItem.id,
+          fileName: currentItem.file.name,
+          fileIndex: progressIndex + 1,
+          totalFiles,
+          overallPercent: calculateOverallPercent(filePercents),
+          filePercent: filePercents[progressIndex] || 0,
+          phase: "error",
+          error: message
+        });
       }
     }
   }
 
-  const workers = Array.from({ length: Math.min(MAX_PARALLEL_UPLOADS, totalFiles) }, () => runWorker());
+  const workers = Array.from({ length: Math.min(MAX_PARALLEL_UPLOADS, uploadableItems.length) }, () => runWorker());
   await Promise.all(workers);
 
-  if (failures.length > 0) {
-    if (failures.length === 1) {
-      throw new Error(failures[0]);
-    }
-
-    throw new Error(`${failures.length} foto(s) no se pudieron subir. Revisa la cola para ver cuales fallaron.`);
-  }
-
-  return { totalFiles };
+  return {
+    totalFiles,
+    completedCount,
+    failedCount: failures.length,
+    failures,
+    reservedSortOrders: reservedSortOrderRecord
+  } satisfies UploadBatchResult;
 }

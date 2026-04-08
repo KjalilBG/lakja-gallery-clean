@@ -63,6 +63,7 @@ export function NewAlbumForm() {
   const [submitError, setSubmitError] = useState("");
   const [submitPhase, setSubmitPhase] = useState<SubmitPhase>("idle");
   const [batchLabel, setBatchLabel] = useState("");
+  const [uploadSummary, setUploadSummary] = useState<{ completed: number; failed: number } | null>(null);
   const inputRef = useRef<HTMLInputElement | null>(null);
 
   function syncInputFiles(nextFiles: File[]) {
@@ -141,6 +142,7 @@ export function NewAlbumForm() {
     setSubmitPhase("creating");
     setSubmitLabel("Guardando album...");
     setBatchLabel("");
+    setUploadSummary(null);
 
     try {
       const createResponse = await fetch("/api/admin/albums", {
@@ -161,9 +163,17 @@ export function NewAlbumForm() {
         setSubmitPhase("uploading");
         setSubmitLabel("Subiendo fotos...");
 
-        await uploadPhotoBatches({
+        const result = await uploadPhotoBatches({
           albumId: createdAlbum.albumId,
-          files: queuedFiles.map(({ id, file }) => ({ id, file })),
+          files: queuedFiles.map(({ id, file, sortOrder, status }) => ({ id, file, sortOrder, status })),
+          onReservedSortOrders: (reservedSortOrders) => {
+            setQueuedFiles((current) =>
+              current.map((item) => ({
+                ...item,
+                sortOrder: reservedSortOrders[item.id] ?? item.sortOrder
+              }))
+            );
+          },
           onProgress: ({ fileId, fileIndex, totalFiles, overallPercent, filePercent, phase, error }) => {
             setSubmitPhase(phase === "processing" ? "processing" : "uploading");
             setBatchLabel(`Foto ${fileIndex} de ${totalFiles}`);
@@ -185,6 +195,16 @@ export function NewAlbumForm() {
             );
           }
         });
+
+        setUploadSummary({ completed: result.completedCount, failed: result.failedCount });
+
+        if (result.failedCount > 0) {
+          throw new Error(
+            result.failedCount === 1
+              ? "1 foto no se pudo subir. El álbum sí se creó y las fotos completadas conservaron su orden."
+              : `${result.failedCount} fotos no se pudieron subir. El álbum sí se creó y las fotos completadas conservaron su orden.`
+          );
+        }
       }
 
       setSubmitPhase("processing");
@@ -207,9 +227,13 @@ export function NewAlbumForm() {
       ? "La foto actual ya termino de enviarse. Ahora estamos creando previews, thumbnails y guardando el album."
       : queuedFiles.length > 0
         ? queuedFiles.length > 1
-          ? `Las fotos se enviaran una por una para que el proceso sea mas estable. Maximo ${MAX_FILES_PER_REQUEST} por peticion.`
+          ? `Las fotos se suben por lotes y cada una conserva su lugar para poder retomar el lote si algo falla. Flujo actual: ${MAX_FILES_PER_REQUEST} foto(s) a la vez.`
           : "El porcentaje no marcara 100% hasta que la foto quede lista de verdad."
         : "Primero guardamos el album y luego te llevamos a la gestion.";
+
+  const doneCount = queuedFiles.filter((item) => item.status === "done").length;
+  const failedCount = queuedFiles.filter((item) => item.status === "error").length;
+  const pendingCount = queuedFiles.filter((item) => item.status === "queued" || item.status === "uploading" || item.status === "processing").length;
 
   return (
     <div className="space-y-6">
@@ -438,6 +462,20 @@ export function NewAlbumForm() {
           {submitError ? (
             <div className="rounded-[20px] border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-bold text-rose-700">
               {submitError}
+            </div>
+          ) : null}
+
+          {queuedFiles.length > 0 ? (
+            <div className="flex flex-wrap gap-2 text-xs font-bold uppercase tracking-[0.14em] text-slate-500">
+              <span className="rounded-full bg-slate-100 px-3 py-2">Listas: {doneCount}</span>
+              <span className="rounded-full bg-slate-100 px-3 py-2">Pendientes: {pendingCount}</span>
+              <span className="rounded-full bg-slate-100 px-3 py-2">Fallidas: {failedCount}</span>
+            </div>
+          ) : null}
+
+          {uploadSummary ? (
+            <div className="rounded-[20px] border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-bold text-slate-700">
+              Avance del lote: {uploadSummary.completed} completadas, {uploadSummary.failed} fallidas.
             </div>
           ) : null}
 

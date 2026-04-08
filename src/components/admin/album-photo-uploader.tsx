@@ -27,6 +27,7 @@ export function AlbumPhotoUploader({ albumId }: AlbumPhotoUploaderProps) {
   const [phase, setPhase] = useState<UploadPhase>("idle");
   const [uploadError, setUploadError] = useState("");
   const [batchLabel, setBatchLabel] = useState("");
+  const [uploadSummary, setUploadSummary] = useState<{ completed: number; failed: number } | null>(null);
 
   const totalSizeLabel = useMemo(() => {
     const totalBytes = queuedFiles.reduce((sum, file) => sum + file.file.size, 0);
@@ -53,19 +54,49 @@ export function AlbumPhotoUploader({ albumId }: AlbumPhotoUploaderProps) {
     setQueuedFiles((current) => current.filter((file) => file.id !== fileId));
   }
 
-  async function uploadFiles() {
+  async function uploadFiles(retryFailedOnly = false) {
     if (queuedFiles.length === 0 || isUploading) return;
+
+    const filesToUpload = retryFailedOnly
+      ? queuedFiles.filter((item) => item.status === "queued" || item.status === "error")
+      : queuedFiles;
+
+    if (filesToUpload.length === 0) return;
 
     setIsUploading(true);
     setProgress(0);
     setPhase("uploading");
     setUploadError("");
     setBatchLabel("");
+    setUploadSummary(null);
+
+    if (retryFailedOnly) {
+      setQueuedFiles((current) =>
+        current.map((item) =>
+          item.status === "error"
+            ? {
+                ...item,
+                status: "queued",
+                error: undefined,
+                progress: 0
+              }
+            : item
+        )
+      );
+    }
 
     try {
-      await uploadPhotoBatches({
+      const result = await uploadPhotoBatches({
         albumId,
-        files: queuedFiles.map(({ id, file }) => ({ id, file })),
+        files: filesToUpload.map(({ id, file, sortOrder, status }) => ({ id, file, sortOrder, status })),
+        onReservedSortOrders: (reservedSortOrders) => {
+          setQueuedFiles((current) =>
+            current.map((item) => ({
+              ...item,
+              sortOrder: reservedSortOrders[item.id] ?? item.sortOrder
+            }))
+          );
+        },
         onProgress: ({ fileId, fileIndex, totalFiles, overallPercent, filePercent, phase: nextPhase, error }) => {
           setProgress(overallPercent);
           setPhase(nextPhase === "processing" ? "processing" : "uploading");
@@ -85,11 +116,22 @@ export function AlbumPhotoUploader({ albumId }: AlbumPhotoUploaderProps) {
         }
       });
 
-      setPhase("processing");
-      setProgress(100);
-      setQueuedFiles((current) => current.map((item) => ({ ...item, status: "done", progress: 100, error: undefined })));
-      router.push(`/appfotos/admin/albums/${albumId}?uploaded=1`);
-      router.refresh();
+      setUploadSummary({ completed: result.completedCount, failed: result.failedCount });
+
+      if (result.failedCount === 0) {
+        setPhase("processing");
+        setProgress(100);
+        setQueuedFiles((current) => current.map((item) => ({ ...item, status: "done", progress: 100, error: undefined })));
+        router.push(`/appfotos/admin/albums/${albumId}?uploaded=1`);
+        router.refresh();
+      } else {
+        setUploadError(
+          result.failedCount === 1
+            ? `1 foto no se pudo subir. Ya puedes reintentarla sin perder el orden del lote.`
+            : `${result.failedCount} fotos no se pudieron subir. Puedes reintentar solo las fallidas sin perder el orden del lote.`
+        );
+        setPhase("idle");
+      }
     } catch (error) {
       setUploadError(error instanceof Error ? error.message : "No se pudieron subir las fotos.");
       setPhase("idle");
@@ -112,8 +154,12 @@ export function AlbumPhotoUploader({ albumId }: AlbumPhotoUploaderProps) {
     phase === "processing"
       ? "La foto actual ya termino de enviarse. Ahora estamos guardando, optimizando y ordenando las fotos."
       : queuedFiles.length > 1
-        ? `La carga se hace con bloques optimizados para que el navegador y el servidor trabajen con menos esperas. Flujo actual: ${MAX_FILES_PER_REQUEST} foto(s) a la vez.`
+        ? `La carga se hace con bloques optimizados para que el navegador y el servidor trabajen con menos esperas. Flujo actual: ${MAX_FILES_PER_REQUEST} foto(s) a la vez y cada foto conserva su lugar para poder retomar si algo falla.`
         : "El porcentaje llegara al 100% solo cuando las fotos esten listas dentro del album.";
+
+  const doneCount = queuedFiles.filter((item) => item.status === "done").length;
+  const failedCount = queuedFiles.filter((item) => item.status === "error").length;
+  const pendingCount = queuedFiles.filter((item) => item.status === "queued" || item.status === "uploading" || item.status === "processing").length;
 
   return (
     <div className="space-y-4">
@@ -242,20 +288,42 @@ export function AlbumPhotoUploader({ albumId }: AlbumPhotoUploaderProps) {
               />
             </div>
             <p className="text-sm text-slate-500">{progressHint}</p>
+            <div className="flex flex-wrap gap-2 text-xs font-bold uppercase tracking-[0.14em] text-slate-500">
+              <span className="rounded-full bg-slate-100 px-3 py-2">Listas: {doneCount}</span>
+              <span className="rounded-full bg-slate-100 px-3 py-2">Pendientes: {pendingCount}</span>
+              <span className="rounded-full bg-slate-100 px-3 py-2">Fallidas: {failedCount}</span>
+            </div>
+            {uploadSummary ? (
+              <div className="rounded-[18px] border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-bold text-slate-700">
+                Avance del lote: {uploadSummary.completed} completadas, {uploadSummary.failed} fallidas.
+              </div>
+            ) : null}
             {uploadError ? (
               <div className="rounded-[18px] border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-bold text-rose-700">
                 {uploadError}
               </div>
             ) : null}
-            <button
-              type="button"
-              onClick={() => void uploadFiles()}
-              disabled={isUploading}
-              className="inline-flex w-full items-center justify-center rounded-full bg-fuchsia-500 px-5 py-4 text-sm font-extrabold uppercase tracking-[0.18em] text-white shadow-[0_14px_26px_rgba(217,70,239,0.26)] transition hover:bg-fuchsia-600 disabled:cursor-not-allowed disabled:opacity-70"
-            >
-              {isUploading ? <LoaderCircle className="mr-2 size-4 animate-spin" /> : <UploadCloud className="mr-2 size-4" />}
-              {isUploading ? progressLabel : "Subir fotos al album"}
-            </button>
+            <div className="flex flex-wrap gap-3">
+              <button
+                type="button"
+                onClick={() => void uploadFiles(false)}
+                disabled={isUploading}
+                className="inline-flex flex-1 items-center justify-center rounded-full bg-fuchsia-500 px-5 py-4 text-sm font-extrabold uppercase tracking-[0.18em] text-white shadow-[0_14px_26px_rgba(217,70,239,0.26)] transition hover:bg-fuchsia-600 disabled:cursor-not-allowed disabled:opacity-70"
+              >
+                {isUploading ? <LoaderCircle className="mr-2 size-4 animate-spin" /> : <UploadCloud className="mr-2 size-4" />}
+                {isUploading ? progressLabel : "Subir fotos al album"}
+              </button>
+              {failedCount > 0 ? (
+                <button
+                  type="button"
+                  onClick={() => void uploadFiles(true)}
+                  disabled={isUploading}
+                  className="inline-flex items-center justify-center rounded-full border border-slate-200 bg-white px-5 py-4 text-sm font-extrabold uppercase tracking-[0.18em] text-slate-700 transition hover:border-fuchsia-300 hover:text-slate-950 disabled:cursor-not-allowed disabled:opacity-70"
+                >
+                  Reintentar fallidas
+                </button>
+              ) : null}
+            </div>
           </div>
         </div>
       ) : null}
