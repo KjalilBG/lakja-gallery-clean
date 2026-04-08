@@ -1700,7 +1700,19 @@ export async function processNextAlbumPhotoPreviewBatch(albumId: string) {
         : JobStatus.COMPLETED
       : JobStatus.PENDING;
 
-  const shouldSendCompletionEmail = nextStatus === JobStatus.COMPLETED && !nextPayload.emailSent;
+  const processingPhotosRemaining = await prisma.photo.count({
+    where: {
+      albumId,
+      status: PhotoStatus.PROCESSING
+    }
+  });
+
+  const emailAlreadySentForAlbum = await hasAlbumProcessingCompletionEmailBeenSent(albumId);
+  const shouldSendCompletionEmail =
+    nextStatus === JobStatus.COMPLETED &&
+    processingPhotosRemaining === 0 &&
+    !emailAlreadySentForAlbum &&
+    !nextPayload.emailSent;
   const persistedPayload: PreviewJobPayload = shouldSendCompletionEmail
     ? {
         ...nextPayload,
@@ -2392,6 +2404,20 @@ async function sendAlbumProcessingCompletedEmail(input: {
       `
     })
   }).catch(() => undefined);
+}
+
+async function hasAlbumProcessingCompletionEmailBeenSent(albumId: string) {
+  const rows = await prisma.$queryRaw<Array<{ exists: boolean }>>`
+    SELECT EXISTS(
+      SELECT 1
+      FROM "Job"
+      WHERE "albumId" = ${albumId}
+        AND "type"::text = ${JobType.GENERATE_PREVIEW}
+        AND COALESCE("payload"->>'emailSent', 'false') = 'true'
+    ) AS "exists"
+  `;
+
+  return rows[0]?.exists ?? false;
 }
 
 export async function deleteAlbum(albumId: string) {
