@@ -123,6 +123,7 @@ type PreviewJobPayload = {
   processed: number;
   completed: number;
   failed: number;
+  emailSent?: boolean;
 };
 
 function isPreviewJobPayload(value: unknown): value is PreviewJobPayload {
@@ -135,7 +136,8 @@ function isPreviewJobPayload(value: unknown): value is PreviewJobPayload {
     typeof payload.total === "number" &&
     typeof payload.processed === "number" &&
     typeof payload.completed === "number" &&
-    typeof payload.failed === "number"
+    typeof payload.failed === "number" &&
+    (payload.emailSent === undefined || typeof payload.emailSent === "boolean")
   );
 }
 
@@ -1472,7 +1474,8 @@ export async function enqueueAlbumPhotoPreviewJob(albumId: string, photoId: stri
     total: nextRemainingPhotoIds.length + (existingPayload?.processed ?? 0),
     processed: existingPayload?.processed ?? 0,
     completed: existingPayload?.completed ?? 0,
-    failed: existingPayload?.failed ?? 0
+    failed: existingPayload?.failed ?? 0,
+    emailSent: existingPayload?.emailSent ?? false
   };
 
   const job = existingJob
@@ -1686,7 +1689,8 @@ export async function processNextAlbumPhotoPreviewBatch(albumId: string) {
     remainingPhotoIds: payload.remainingPhotoIds.slice(photoIds.length),
     processed: payload.processed + processedInBatch,
     completed: payload.completed + completedInBatch,
-    failed: payload.failed + failedInBatch
+    failed: payload.failed + failedInBatch,
+    emailSent: payload.emailSent ?? false
   };
 
   const nextStatus =
@@ -1696,16 +1700,24 @@ export async function processNextAlbumPhotoPreviewBatch(albumId: string) {
         : JobStatus.COMPLETED
       : JobStatus.PENDING;
 
+  const shouldSendCompletionEmail = nextStatus === JobStatus.COMPLETED && !nextPayload.emailSent;
+  const persistedPayload: PreviewJobPayload = shouldSendCompletionEmail
+    ? {
+        ...nextPayload,
+        emailSent: true
+      }
+    : nextPayload;
+
   await prisma.job.update({
     where: { id: jobId },
     data: {
       status: nextStatus,
-      payload: nextPayload,
+      payload: persistedPayload,
       runAt: new Date()
     }
   });
 
-  if (nextStatus === JobStatus.COMPLETED) {
+  if (shouldSendCompletionEmail) {
     const album = await prisma.album.findUnique({
       where: { id: albumId },
       select: {
@@ -2166,9 +2178,90 @@ export async function reorderAlbumPhotos(albumId: string, orderedPhotoIds: strin
 }
 
 export async function deleteAlbumPhotos(albumId: string, photoIds: string[]) {
-  for (const photoId of photoIds) {
-    await deleteAlbumPhoto(albumId, photoId);
+  if (photoIds.length === 0) {
+    return;
   }
+
+  const photos = await prisma.photo.findMany({
+    where: {
+      albumId,
+      id: {
+        in: photoIds
+      }
+    },
+    select: {
+      id: true,
+      originalKey: true,
+      previewKey: true,
+      thumbKey: true
+    }
+  });
+
+  if (photos.length === 0) {
+    return;
+  }
+
+  const deletedIds = new Set(photos.map((photo) => photo.id));
+  const album = await prisma.album.findUnique({
+    where: { id: albumId },
+    select: {
+      coverPhotoId: true,
+      photos: {
+        where: {
+          id: {
+            notIn: Array.from(deletedIds)
+          }
+        },
+        orderBy: {
+          sortOrder: "asc"
+        },
+        select: {
+          id: true
+        }
+      }
+    }
+  });
+
+  await prisma.photo.deleteMany({
+    where: {
+      albumId,
+      id: {
+        in: Array.from(deletedIds)
+      }
+    }
+  });
+
+  await normalizeAlbumPhotoOrder(albumId);
+
+  if (album && album.coverPhotoId && deletedIds.has(album.coverPhotoId)) {
+    await prisma.album.update({
+      where: { id: albumId },
+      data: {
+        coverPhotoId: album.photos[0]?.id ?? null
+      }
+    });
+  }
+
+  const possibleFiles = photos
+    .flatMap((photo) => [photo.originalKey, photo.previewKey, photo.thumbKey])
+    .filter((value): value is string => Boolean(value))
+    .filter((value, index, array) => array.indexOf(value) === index);
+
+  await Promise.all(
+    possibleFiles.map(async (publicPath) => {
+      if (publicPath.startsWith("r2://")) {
+        await removeFromR2(publicPath).catch(() => undefined);
+        return;
+      }
+
+      if (!publicPath.startsWith("/uploads/")) {
+        return;
+      }
+
+      const absolutePath = path.join(process.cwd(), "public", publicPath.replace("/uploads/", "uploads/"));
+      await unlink(absolutePath).catch(() => undefined);
+    })
+  );
 }
 
 export async function getDownloadableAlbumPhotos(slug: string) {
