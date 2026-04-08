@@ -20,13 +20,33 @@ const allowedSuperAdminEmails = (() => {
   return allowedAdminEmails.length > 0 ? [allowedAdminEmails[0]] : [];
 })();
 
+function isProduction() {
+  return process.env.NODE_ENV === "production";
+}
+
+function hasConfiguredAdminAllowlist() {
+  return allowedAdminEmails.length > 0;
+}
+
+export function isAdminEmail(email?: string | null) {
+  if (!email) {
+    return false;
+  }
+
+  if (!hasConfiguredAdminAllowlist()) {
+    return !isProduction();
+  }
+
+  return allowedAdminEmails.includes(email.toLowerCase());
+}
+
 export function isSuperAdminEmail(email?: string | null) {
   if (!email) {
     return false;
   }
 
   if (allowedSuperAdminEmails.length === 0) {
-    return true;
+    return !isProduction();
   }
 
   return allowedSuperAdminEmails.includes(email.toLowerCase());
@@ -62,7 +82,7 @@ export const authOptions: NextAuthOptions = {
       console.log("[auth] signIn attempt", {
         provider: account?.provider,
         email: user.email ?? null,
-        hasAllowlist: allowedAdminEmails.length > 0,
+        hasAllowlist: hasConfiguredAdminAllowlist(),
         allowlistSize: allowedAdminEmails.length
       });
 
@@ -76,7 +96,12 @@ export const authOptions: NextAuthOptions = {
         return false;
       }
 
-      if (allowedAdminEmails.length > 0 && !allowedAdminEmails.includes(user.email.toLowerCase())) {
+      if (isProduction() && !hasConfiguredAdminAllowlist()) {
+        console.error("[auth] blocked because ADMIN_EMAILS is not configured in production");
+        return "/login?error=Configuration";
+      }
+
+      if (hasConfiguredAdminAllowlist() && !allowedAdminEmails.includes(user.email.toLowerCase())) {
         console.log("[auth] blocked email not in allowlist", {
           email: user.email.toLowerCase()
         });
@@ -97,7 +122,7 @@ export const authOptions: NextAuthOptions = {
         return token;
       }
 
-      token.role = allowedAdminEmails.length === 0 || allowedAdminEmails.includes(token.email.toLowerCase()) ? "ADMIN" : undefined;
+      token.role = isAdminEmail(token.email) ? "ADMIN" : undefined;
       token.isSuperAdmin = isSuperAdminEmail(token.email);
 
       return token;
@@ -105,7 +130,7 @@ export const authOptions: NextAuthOptions = {
     async session({ session, token }) {
       if (session.user) {
         session.user.id = token.sub ?? session.user.id;
-        session.user.role = typeof token.role === "string" ? token.role : "ADMIN";
+        session.user.role = typeof token.role === "string" ? token.role : undefined;
         session.user.isSuperAdmin = token.isSuperAdmin === true;
       }
 

@@ -1,12 +1,12 @@
 import { redirect } from "next/navigation";
 import { NextResponse } from "next/server";
 
-import { getServerAuthSession, isSuperAdminEmail } from "@/lib/auth";
+import { getServerAuthSession, isAdminEmail, isSuperAdminEmail } from "@/lib/auth";
 
 export async function requireAdminSession(callbackUrl = "/appfotos/admin") {
   const session = await getServerAuthSession();
 
-  if (!session?.user) {
+  if (!session?.user?.email || !isAdminEmail(session.user.email)) {
     redirect(`/login?callbackUrl=${encodeURIComponent(callbackUrl)}`);
   }
 
@@ -16,7 +16,7 @@ export async function requireAdminSession(callbackUrl = "/appfotos/admin") {
 export async function ensureAdminApiRequest() {
   const session = await getServerAuthSession();
 
-  if (!session?.user) {
+  if (!session?.user?.email || !isAdminEmail(session.user.email)) {
     return NextResponse.json({ ok: false, error: "No autenticado." }, { status: 401 });
   }
 

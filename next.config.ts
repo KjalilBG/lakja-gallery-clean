@@ -1,5 +1,7 @@
 import type { NextConfig } from "next";
 
+const isDevelopment = process.env.NODE_ENV === "development";
+
 const securityHeaders = [
   {
     key: "X-Frame-Options",
@@ -23,10 +25,11 @@ const securityHeaders = [
       "default-src 'self'",
       "base-uri 'self'",
       "frame-ancestors 'none'",
+      "object-src 'none'",
       "img-src 'self' data: blob: https:",
       "font-src 'self' data:",
       "style-src 'self' 'unsafe-inline'",
-      "script-src 'self' 'unsafe-inline' 'unsafe-eval'",
+      `script-src 'self' 'unsafe-inline'${isDevelopment ? " 'unsafe-eval'" : ""}`,
       "connect-src 'self' https: wss:",
       "media-src 'self' blob: https:",
       "form-action 'self' https://accounts.google.com"
