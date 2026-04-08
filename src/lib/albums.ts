@@ -716,6 +716,9 @@ export async function getAdminAlbumById(id: string): Promise<AlbumDetail | null>
   const previewJobPayload = latestPreviewJob ? normalizePreviewJobPayload(latestPreviewJob.payload) : null;
   const processingPhotosCount = album.photos.filter((photo) => photo.status === PhotoStatus.PROCESSING).length;
   const failedPhotosCount = album.photos.filter((photo) => photo.status === PhotoStatus.FAILED).length;
+  const retryablePhotosCount = album.photos.filter(
+    (photo) => photo.status === PhotoStatus.FAILED || !photo.previewKey || !photo.thumbKey
+  ).length;
 
   return {
     id: album.id,
@@ -740,6 +743,7 @@ export async function getAdminAlbumById(id: string): Promise<AlbumDetail | null>
     bibRecognizedPhotosCount: album.photos.filter((photo) => photo.detectedBibs.length > 0).length,
     processingPhotosCount,
     failedPhotosCount,
+    retryablePhotosCount,
     bibJob:
       latestBibJob && bibJobPayload
         ? {

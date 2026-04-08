@@ -74,12 +74,12 @@ export default async function AlbumDetailPage({ params, searchParams }: AlbumDet
             : `${album.processingPhotosCount} fotos ya se subieron y siguen preparando preview y thumb en segundo plano.`}
         </div>
       ) : null}
-      {album.failedPhotosCount > 0 ? (
+      {album.retryablePhotosCount > 0 ? (
         <div className="flex flex-col gap-3 rounded-[24px] border border-rose-200 bg-rose-50 px-5 py-4 text-sm font-bold text-rose-800 md:flex-row md:items-center md:justify-between">
           <p>
-            {album.failedPhotosCount === 1
-              ? "1 foto no pudo generar sus derivados y se marco como fallida."
-              : `${album.failedPhotosCount} fotos no pudieron generar sus derivados y se marcaron como fallidas.`}
+            {album.retryablePhotosCount === 1
+              ? "1 foto sigue sin preview o thumb listo y ya puedes reintentar sus derivados."
+              : `${album.retryablePhotosCount} fotos siguen sin preview o thumb listos y ya puedes reintentar sus derivados.`}
           </p>
           <AlbumRetryDerivativesButton
             albumId={album.id}
@@ -126,9 +126,9 @@ export default async function AlbumDetailPage({ params, searchParams }: AlbumDet
               <div className="rounded-[24px] border border-slate-200 bg-slate-50 px-5 py-4">
                 <p className="text-[11px] font-extrabold uppercase tracking-[0.24em] text-slate-400">Fotos</p>
                 <p className="mt-2 text-lg font-black text-slate-900">{album.photoCount}</p>
-                {album.processingPhotosCount > 0 || album.failedPhotosCount > 0 ? (
+                {album.processingPhotosCount > 0 || album.retryablePhotosCount > 0 ? (
                   <p className="mt-1 text-xs font-bold text-slate-500">
-                    {album.processingPhotosCount} procesando · {album.failedPhotosCount} fallidas
+                    {album.processingPhotosCount} procesando · {album.retryablePhotosCount} por reintentar
                   </p>
                 ) : null}
               </div>

@@ -60,6 +60,7 @@ export type AlbumDetail = {
   bibRecognizedPhotosCount: number;
   processingPhotosCount: number;
   failedPhotosCount: number;
+  retryablePhotosCount: number;
   bibJob?: {
     id: string;
     status: "pending" | "running" | "completed" | "failed";
