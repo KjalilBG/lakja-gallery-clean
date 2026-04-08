@@ -1432,18 +1432,29 @@ export async function updatePhotoBibsManually(albumId: string, photoId: string, 
 }
 
 export async function enqueueAlbumPhotoPreviewJob(albumId: string, photoId: string, batchSize = 3) {
+  return enqueueAlbumPhotoPreviewJobs(albumId, [photoId], batchSize);
+}
+
+async function enqueueAlbumPhotoPreviewJobs(albumId: string, photoIds: string[], batchSize = 3) {
   const safeBatchSize = Math.min(Math.max(batchSize, 2), 6);
-  const photo = await prisma.photo.findUnique({
-    where: { id: photoId },
+  const photos = await prisma.photo.findMany({
+    where: {
+      albumId,
+      id: {
+        in: Array.from(new Set(photoIds))
+      }
+    },
     select: {
       id: true,
       albumId: true,
-      status: true
+      status: true,
+      previewKey: true,
+      thumbKey: true
     }
   });
 
-  if (!photo || photo.albumId !== albumId) {
-    throw new Error("No se encontro la foto cargada.");
+  if (photos.length === 0) {
+    throw new Error("No se encontro ninguna foto para encolar.");
   }
 
   const existingJob = await prisma.job.findFirst({
@@ -1462,11 +1473,18 @@ export async function enqueueAlbumPhotoPreviewJob(albumId: string, photoId: stri
   });
 
   const existingPayload = existingJob ? normalizePreviewJobPayload(existingJob.payload) : null;
-  const remainingPhotoIds = existingPayload?.remainingPhotoIds ?? [];
-  const nextRemainingPhotoIds =
-    photo.status === PhotoStatus.READY || remainingPhotoIds.includes(photoId)
-      ? remainingPhotoIds
-      : [...remainingPhotoIds, photoId];
+  const remainingPhotoIds = new Set(existingPayload?.remainingPhotoIds ?? []);
+
+  for (const photo of photos) {
+    const hasMissingDerivatives = !photo.previewKey || !photo.thumbKey;
+    const shouldQueue = photo.status !== PhotoStatus.READY || hasMissingDerivatives;
+
+    if (shouldQueue) {
+      remainingPhotoIds.add(photo.id);
+    }
+  }
+
+  const nextRemainingPhotoIds = Array.from(remainingPhotoIds);
 
   const payload: PreviewJobPayload = {
     batchSize: existingPayload?.batchSize ?? safeBatchSize,
@@ -1501,6 +1519,55 @@ export async function enqueueAlbumPhotoPreviewJob(albumId: string, photoId: stri
     total: payload.total,
     remaining: payload.remainingPhotoIds.length,
     batchSize: payload.batchSize
+  };
+}
+
+export async function retryAlbumMissingPhotoDerivatives(albumId: string) {
+  const photosToRetry = await prisma.photo.findMany({
+    where: {
+      albumId,
+      OR: [
+        {
+          status: PhotoStatus.FAILED
+        },
+        {
+          previewKey: null
+        },
+        {
+          thumbKey: null
+        }
+      ]
+    },
+    select: {
+      id: true
+    }
+  });
+
+  if (photosToRetry.length === 0) {
+    return {
+      retriedCount: 0,
+      remaining: 0
+    };
+  }
+
+  const photoIds = photosToRetry.map((photo) => photo.id);
+
+  await prisma.photo.updateMany({
+    where: {
+      id: {
+        in: photoIds
+      }
+    },
+    data: {
+      status: PhotoStatus.PROCESSING
+    }
+  });
+
+  const queued = await enqueueAlbumPhotoPreviewJobs(albumId, photoIds);
+
+  return {
+    retriedCount: photoIds.length,
+    ...queued
   };
 }
 
@@ -1700,17 +1767,28 @@ export async function processNextAlbumPhotoPreviewBatch(albumId: string) {
         : JobStatus.COMPLETED
       : JobStatus.PENDING;
 
-  const processingPhotosRemaining = await prisma.photo.count({
+  const pendingDerivativePhotosRemaining = await prisma.photo.count({
     where: {
       albumId,
-      status: PhotoStatus.PROCESSING
+      OR: [
+        {
+          status: {
+            not: PhotoStatus.READY
+          }
+        },
+        {
+          previewKey: null
+        },
+        {
+          thumbKey: null
+        }
+      ]
     }
   });
 
   const emailAlreadySentForAlbum = await hasAlbumProcessingCompletionEmailBeenSent(albumId);
   const shouldSendCompletionEmail =
-    nextStatus === JobStatus.COMPLETED &&
-    processingPhotosRemaining === 0 &&
+    pendingDerivativePhotosRemaining === 0 &&
     !emailAlreadySentForAlbum &&
     !nextPayload.emailSent;
   const persistedPayload: PreviewJobPayload = shouldSendCompletionEmail

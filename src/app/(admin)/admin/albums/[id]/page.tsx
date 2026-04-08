@@ -6,6 +6,7 @@ import { ArrowLeft, Download, ExternalLink, Eye, FileText, Heart, Settings2, Tra
 import { AlbumPhotoWorkspace } from "@/components/admin/album-photo-workspace";
 import { AlbumPhotoUploader } from "@/components/admin/album-photo-uploader";
 import { AlbumPhotoProcessingSync } from "@/components/admin/album-photo-processing-sync";
+import { AlbumRetryDerivativesButton } from "@/components/admin/album-retry-derivatives-button";
 import { AlbumSettingsFields } from "@/components/admin/album-settings-fields";
 import { AlbumBibOcrPanel } from "@/components/admin/album-bib-ocr-panel";
 import { ConfirmDeleteAlbumButton } from "@/components/admin/confirm-delete-album-button";
@@ -74,10 +75,17 @@ export default async function AlbumDetailPage({ params, searchParams }: AlbumDet
         </div>
       ) : null}
       {album.failedPhotosCount > 0 ? (
-        <div className="rounded-[24px] border border-rose-200 bg-rose-50 px-5 py-4 text-sm font-bold text-rose-800">
-          {album.failedPhotosCount === 1
-            ? "1 foto no pudo generar sus derivados y se marco como fallida."
-            : `${album.failedPhotosCount} fotos no pudieron generar sus derivados y se marcaron como fallidas.`}
+        <div className="flex flex-col gap-3 rounded-[24px] border border-rose-200 bg-rose-50 px-5 py-4 text-sm font-bold text-rose-800 md:flex-row md:items-center md:justify-between">
+          <p>
+            {album.failedPhotosCount === 1
+              ? "1 foto no pudo generar sus derivados y se marco como fallida."
+              : `${album.failedPhotosCount} fotos no pudieron generar sus derivados y se marcaron como fallidas.`}
+          </p>
+          <AlbumRetryDerivativesButton
+            albumId={album.id}
+            slug={album.slug}
+            disabled={album.processingPhotosCount > 0}
+          />
         </div>
       ) : null}
       {resolvedSearchParams.ocrError ? (
