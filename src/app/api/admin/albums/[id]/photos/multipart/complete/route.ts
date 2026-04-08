@@ -2,8 +2,9 @@ import { revalidatePath } from "next/cache";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 
-import { saveAlbumPhotoFromStorage } from "@/lib/albums";
+import { enqueueAlbumPhotoPreviewJob, saveAlbumPhotoFromStorage } from "@/lib/albums";
 import { ensureAdminApiRequest } from "@/lib/auth-guard";
+import { prisma } from "@/lib/prisma";
 import { checkRateLimit, getSafeErrorMessage } from "@/lib/rate-limit";
 import { abortMultipartUpload, completeMultipartUpload, isR2Configured, removeFromR2 } from "@/lib/r2";
 import { sanitizeJsonValue } from "@/lib/sanitize";
@@ -45,6 +46,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
 
   let parsedBody: z.infer<typeof completeSchema> | null = null;
   let completedStorageKey: string | null = null;
+  let createdPhotoId: string | null = null;
 
   try {
     const { id } = await params;
@@ -68,7 +70,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       parts: body.parts
     });
 
-    await saveAlbumPhotoFromStorage({
+    const photo = await saveAlbumPhotoFromStorage({
       albumId: body.albumId,
       filename: body.fileName,
       originalStorageKey: completedStorageKey,
@@ -77,14 +79,21 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       lastModified: body.lastModified,
       sortOrder: body.sortOrder
     });
+    createdPhotoId = photo.id;
+
+    await enqueueAlbumPhotoPreviewJob(body.albumId, photo.id);
 
     revalidatePath(`/appfotos/admin/albums/${body.albumId}`);
     revalidatePath("/appfotos/admin/albums");
     revalidatePath("/appfotos/admin");
 
-    return NextResponse.json({ ok: true });
+    return NextResponse.json({ ok: true, photoId: photo.id, status: "PROCESSING" });
   } catch (error) {
     if (parsedBody) {
+      if (createdPhotoId) {
+        await prisma.photo.delete({ where: { id: createdPhotoId } }).catch(() => undefined);
+      }
+
       if (completedStorageKey) {
         await removeFromR2(completedStorageKey).catch(() => undefined);
       } else {

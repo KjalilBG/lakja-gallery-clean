@@ -31,6 +31,7 @@ export type GalleryPhoto = {
   isFavorite?: boolean;
   isCover?: boolean;
   sortOrder?: number;
+  processingStatus?: "processing" | "ready" | "failed";
   detectedBibs?: string[];
   bibOcrText?: string | null;
   bibOcrProcessedAt?: string | null;
@@ -57,6 +58,8 @@ export type AlbumDetail = {
   bibRecognitionEnabled: boolean;
   bibRecognitionProcessedAt: string | null;
   bibRecognizedPhotosCount: number;
+  processingPhotosCount: number;
+  failedPhotosCount: number;
   bibJob?: {
     id: string;
     status: "pending" | "running" | "completed" | "failed";
@@ -68,6 +71,17 @@ export type AlbumDetail = {
     remaining: number;
     batchSize: number;
     mode: "all" | "pending";
+    updatedAt: string;
+  } | null;
+  previewJob?: {
+    id: string;
+    status: "pending" | "running" | "completed" | "failed";
+    total: number;
+    processed: number;
+    completed: number;
+    failed: number;
+    remaining: number;
+    batchSize: number;
     updatedAt: string;
   } | null;
   permissions: AlbumPermissionSet;

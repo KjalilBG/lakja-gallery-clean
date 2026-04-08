@@ -1,4 +1,4 @@
-import { AlbumStatus, AlbumVisibility, CoverPosition, FavoriteSelectionStatus, JobStatus, JobType } from "@prisma/client";
+import { AlbumStatus, AlbumVisibility, CoverPosition, FavoriteSelectionStatus, JobStatus, JobType, PhotoStatus } from "@prisma/client";
 import path from "node:path";
 import { mkdir, rm, unlink, writeFile } from "node:fs/promises";
 
@@ -101,6 +101,33 @@ function normalizeBibJobPayload(value: unknown): BibJobPayload | null {
   return isBibJobPayload(value) ? value : null;
 }
 
+type PreviewJobPayload = {
+  batchSize: number;
+  remainingPhotoIds: string[];
+  total: number;
+  processed: number;
+  completed: number;
+  failed: number;
+};
+
+function isPreviewJobPayload(value: unknown): value is PreviewJobPayload {
+  if (!value || typeof value !== "object") return false;
+  const payload = value as Record<string, unknown>;
+
+  return (
+    typeof payload.batchSize === "number" &&
+    Array.isArray(payload.remainingPhotoIds) &&
+    typeof payload.total === "number" &&
+    typeof payload.processed === "number" &&
+    typeof payload.completed === "number" &&
+    typeof payload.failed === "number"
+  );
+}
+
+function normalizePreviewJobPayload(value: unknown): PreviewJobPayload | null {
+  return isPreviewJobPayload(value) ? value : null;
+}
+
 async function ensureUniqueSlug(base: string, excludeAlbumId?: string) {
   const normalized = createSlug(base) || `album-${Date.now()}`;
   let candidate = normalized;
@@ -149,6 +176,20 @@ async function getNextAlbumPhotoSortOrder(albumId: string) {
   });
 
   return (result._max.sortOrder ?? -1) + 1;
+}
+
+async function assignAlbumCoverIfMissing(albumId: string, fallbackPhotoId: string) {
+  const album = await prisma.album.findUnique({
+    where: { id: albumId },
+    select: { coverPhotoId: true }
+  });
+
+  if (!album?.coverPhotoId) {
+    await prisma.album.update({
+      where: { id: albumId },
+      data: { coverPhotoId: fallbackPhotoId }
+    });
+  }
 }
 
 export async function reserveAlbumPhotoSortOrders(albumId: string, totalFiles: number) {
@@ -619,11 +660,12 @@ export async function getAdminAlbumById(id: string): Promise<AlbumDetail | null>
       }
       ,
       jobs: {
-        where: { type: JobType.OCR_BIB },
+        where: { type: { in: [JobType.OCR_BIB, JobType.GENERATE_PREVIEW] } },
         orderBy: { updatedAt: "desc" },
-        take: 1,
+        take: 4,
         select: {
           id: true,
+          type: true,
           status: true,
           payload: true,
           updatedAt: true
@@ -636,8 +678,12 @@ export async function getAdminAlbumById(id: string): Promise<AlbumDetail | null>
     return null;
   }
 
-  const latestBibJob = album.jobs[0];
+  const latestBibJob = album.jobs.find((job) => job.type === JobType.OCR_BIB);
+  const latestPreviewJob = album.jobs.find((job) => job.type === JobType.GENERATE_PREVIEW);
   const bibJobPayload = latestBibJob ? normalizeBibJobPayload(latestBibJob.payload) : null;
+  const previewJobPayload = latestPreviewJob ? normalizePreviewJobPayload(latestPreviewJob.payload) : null;
+  const processingPhotosCount = album.photos.filter((photo) => photo.status === PhotoStatus.PROCESSING).length;
+  const failedPhotosCount = album.photos.filter((photo) => photo.status === PhotoStatus.FAILED).length;
 
   return {
     id: album.id,
@@ -660,6 +706,8 @@ export async function getAdminAlbumById(id: string): Promise<AlbumDetail | null>
     bibRecognitionEnabled: album.bibRecognitionEnabled,
     bibRecognitionProcessedAt: album.bibRecognitionProcessedAt ? album.bibRecognitionProcessedAt.toISOString() : null,
     bibRecognizedPhotosCount: album.photos.filter((photo) => photo.detectedBibs.length > 0).length,
+    processingPhotosCount,
+    failedPhotosCount,
     bibJob:
       latestBibJob && bibJobPayload
         ? {
@@ -681,6 +729,27 @@ export async function getAdminAlbumById(id: string): Promise<AlbumDetail | null>
             batchSize: bibJobPayload.batchSize,
             mode: bibJobPayload.mode,
             updatedAt: latestBibJob.updatedAt.toISOString()
+          }
+        : null,
+    previewJob:
+      latestPreviewJob && previewJobPayload
+        ? {
+            id: latestPreviewJob.id,
+            status:
+              latestPreviewJob.status === JobStatus.RUNNING
+                ? "running"
+                : latestPreviewJob.status === JobStatus.COMPLETED
+                  ? "completed"
+                  : latestPreviewJob.status === JobStatus.FAILED
+                    ? "failed"
+                    : "pending",
+            total: previewJobPayload.total,
+            processed: previewJobPayload.processed,
+            completed: previewJobPayload.completed,
+            failed: previewJobPayload.failed,
+            remaining: previewJobPayload.remainingPhotoIds.length,
+            batchSize: previewJobPayload.batchSize,
+            updatedAt: latestPreviewJob.updatedAt.toISOString()
           }
         : null,
     permissions: {
@@ -714,6 +783,8 @@ export async function getAdminAlbumById(id: string): Promise<AlbumDetail | null>
       aspect: detectAspect(photo.filename),
       isCover: album.coverPhotoId === photo.id,
       sortOrder: photo.sortOrder,
+      processingStatus:
+        photo.status === PhotoStatus.READY ? "ready" : photo.status === PhotoStatus.FAILED ? "failed" : "processing",
       detectedBibs: photo.detectedBibs,
       bibOcrText: photo.bibOcrText,
       bibOcrProcessedAt: photo.bibOcrProcessedAt ? photo.bibOcrProcessedAt.toISOString() : null
@@ -739,6 +810,7 @@ export async function getAlbumBySlug(slug: string) {
     include: {
       coverPhoto: true,
       photos: {
+        where: { status: PhotoStatus.READY },
         orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }]
       },
       _count: {
@@ -1327,6 +1399,303 @@ export async function updatePhotoBibsManually(albumId: string, photoId: string, 
   };
 }
 
+export async function enqueueAlbumPhotoPreviewJob(albumId: string, photoId: string, batchSize = 1) {
+  const safeBatchSize = Math.min(Math.max(batchSize, 1), 4);
+  const photo = await prisma.photo.findUnique({
+    where: { id: photoId },
+    select: {
+      id: true,
+      albumId: true,
+      status: true
+    }
+  });
+
+  if (!photo || photo.albumId !== albumId) {
+    throw new Error("No se encontro la foto cargada.");
+  }
+
+  const existingJob = await prisma.job.findFirst({
+    where: {
+      albumId,
+      type: JobType.GENERATE_PREVIEW,
+      status: {
+        in: [JobStatus.PENDING, JobStatus.RUNNING]
+      }
+    },
+    orderBy: { updatedAt: "desc" },
+    select: {
+      id: true,
+      payload: true
+    }
+  });
+
+  const existingPayload = existingJob ? normalizePreviewJobPayload(existingJob.payload) : null;
+  const remainingPhotoIds = existingPayload?.remainingPhotoIds ?? [];
+  const nextRemainingPhotoIds =
+    photo.status === PhotoStatus.READY || remainingPhotoIds.includes(photoId)
+      ? remainingPhotoIds
+      : [...remainingPhotoIds, photoId];
+
+  const payload: PreviewJobPayload = {
+    batchSize: existingPayload?.batchSize ?? safeBatchSize,
+    remainingPhotoIds: nextRemainingPhotoIds,
+    total: nextRemainingPhotoIds.length + (existingPayload?.processed ?? 0),
+    processed: existingPayload?.processed ?? 0,
+    completed: existingPayload?.completed ?? 0,
+    failed: existingPayload?.failed ?? 0
+  };
+
+  const job = existingJob
+    ? await prisma.job.update({
+        where: { id: existingJob.id },
+        data: {
+          status: JobStatus.PENDING,
+          payload,
+          runAt: new Date()
+        }
+      })
+    : await prisma.job.create({
+        data: {
+          albumId,
+          type: JobType.GENERATE_PREVIEW,
+          status: JobStatus.PENDING,
+          payload
+        }
+      });
+
+  return {
+    jobId: job.id,
+    total: payload.total,
+    remaining: payload.remainingPhotoIds.length,
+    batchSize: payload.batchSize
+  };
+}
+
+export async function processSingleAlbumPhotoPreview(albumId: string, photoId: string) {
+  const photo = await prisma.photo.findUnique({
+    where: { id: photoId },
+    select: {
+      id: true,
+      albumId: true,
+      filename: true,
+      originalKey: true,
+      sizeBytes: true,
+      status: true
+    }
+  });
+
+  if (!photo || photo.albumId !== albumId) {
+    throw new Error("No se encontro la foto.");
+  }
+
+  if (photo.status === PhotoStatus.READY) {
+    return { status: "ready" as const };
+  }
+
+  const parsedOriginalKey = parseStorageKey(photo.originalKey);
+
+  if (!parsedOriginalKey) {
+    await prisma.photo.update({
+      where: { id: photo.id },
+      data: { status: PhotoStatus.FAILED }
+    });
+    throw new Error("La ruta del original no es valida.");
+  }
+
+  let uploadedPreviewKey: string | null = null;
+  let uploadedThumbKey: string | null = null;
+
+  try {
+    const { body, contentType } = await readFromR2(photo.originalKey);
+
+    if (typeof photo.sizeBytes === "number" && photo.sizeBytes > 0 && body.byteLength !== photo.sizeBytes) {
+      throw new Error("La foto cargada no coincide con el tamano esperado.");
+    }
+
+    const derivatives = await buildImageDerivatives({
+      buffer: body,
+      fileName: photo.filename,
+      contentType
+    });
+    const uniqueBaseName = path.parse(path.basename(parsedOriginalKey.key)).name;
+    const previewObjectKey = `albums/${albumId}/previews/${uniqueBaseName}-preview${derivatives.previewExtension}`;
+    const thumbObjectKey = `albums/${albumId}/thumbs/${uniqueBaseName}-thumb${derivatives.thumbExtension}`;
+    const capturedAt = await extractCapturedAt(body, 0);
+
+    uploadedPreviewKey = await uploadToR2({
+      bucket: "derivatives",
+      key: previewObjectKey,
+      body: derivatives.previewBuffer,
+      contentType: derivatives.previewContentType
+    });
+
+    uploadedThumbKey = await uploadToR2({
+      bucket: "derivatives",
+      key: thumbObjectKey,
+      body: derivatives.thumbBuffer,
+      contentType: derivatives.thumbContentType
+    });
+
+    await prisma.photo.update({
+      where: { id: photo.id },
+      data: {
+        previewKey: uploadedPreviewKey,
+        thumbKey: uploadedThumbKey,
+        capturedAt: capturedAt ?? undefined,
+        width: derivatives.width,
+        height: derivatives.height,
+        status: PhotoStatus.READY
+      }
+    });
+
+    return { status: "completed" as const };
+  } catch (error) {
+    await prisma.photo.update({
+      where: { id: photo.id },
+      data: {
+        status: PhotoStatus.FAILED
+      }
+    });
+
+    await Promise.all([
+      uploadedPreviewKey ? removeFromR2(uploadedPreviewKey).catch(() => undefined) : Promise.resolve(),
+      uploadedThumbKey ? removeFromR2(uploadedThumbKey).catch(() => undefined) : Promise.resolve()
+    ]);
+
+    throw error;
+  }
+}
+
+export async function processNextAlbumPhotoPreviewBatch(albumId: string) {
+  const claimedJob = await prisma.$transaction(async (tx) => {
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`preview:${albumId}`}))`;
+
+    const job = await tx.job.findFirst({
+      where: {
+        albumId,
+        type: JobType.GENERATE_PREVIEW,
+        status: {
+          in: [JobStatus.PENDING, JobStatus.RUNNING]
+        }
+      },
+      orderBy: { updatedAt: "desc" },
+      select: {
+        id: true,
+        payload: true
+      }
+    });
+
+    if (!job) {
+      return null;
+    }
+
+    const payload = normalizePreviewJobPayload(job.payload);
+
+    if (!payload) {
+      throw new Error("La cola de previews no tiene un formato valido.");
+    }
+
+    if (payload.remainingPhotoIds.length === 0) {
+      await tx.job.update({
+        where: { id: job.id },
+        data: { status: JobStatus.COMPLETED }
+      });
+
+      return {
+        jobId: job.id,
+        payload,
+        photoIds: [] as string[]
+      };
+    }
+
+    await tx.job.update({
+      where: { id: job.id },
+      data: {
+        status: JobStatus.RUNNING,
+        attempts: {
+          increment: 1
+        }
+      }
+    });
+
+    return {
+      jobId: job.id,
+      payload,
+      photoIds: payload.remainingPhotoIds.slice(0, payload.batchSize)
+    };
+  });
+
+  if (!claimedJob) {
+    throw new Error("No hay una cola de previews activa para este album.");
+  }
+
+  const { jobId, payload, photoIds } = claimedJob;
+
+  if (photoIds.length === 0) {
+    return {
+      jobId,
+      processedInBatch: 0,
+      completedInBatch: 0,
+      failedInBatch: 0,
+      remaining: 0,
+      completed: true,
+      totals: payload
+    };
+  }
+
+  let processedInBatch = 0;
+  let completedInBatch = 0;
+  let failedInBatch = 0;
+
+  for (const photoId of photoIds) {
+    try {
+      const result = await processSingleAlbumPhotoPreview(albumId, photoId);
+      processedInBatch += 1;
+
+      if (result.status === "completed" || result.status === "ready") {
+        completedInBatch += 1;
+      }
+    } catch {
+      processedInBatch += 1;
+      failedInBatch += 1;
+    }
+  }
+
+  const nextPayload: PreviewJobPayload = {
+    ...payload,
+    remainingPhotoIds: payload.remainingPhotoIds.slice(photoIds.length),
+    processed: payload.processed + processedInBatch,
+    completed: payload.completed + completedInBatch,
+    failed: payload.failed + failedInBatch
+  };
+
+  const nextStatus =
+    nextPayload.remainingPhotoIds.length === 0
+      ? nextPayload.failed > 0
+        ? JobStatus.FAILED
+        : JobStatus.COMPLETED
+      : JobStatus.PENDING;
+
+  await prisma.job.update({
+    where: { id: jobId },
+    data: {
+      status: nextStatus,
+      payload: nextPayload,
+      runAt: new Date()
+    }
+  });
+
+  return {
+    jobId,
+    processedInBatch,
+    completedInBatch,
+    failedInBatch,
+    remaining: nextPayload.remainingPhotoIds.length,
+    completed: nextPayload.remainingPhotoIds.length === 0,
+    totals: nextPayload
+  };
+}
+
 export function buildGalleryPhotosFromAlbum(
   albumTitle: string,
   photos: Array<{
@@ -1336,6 +1705,7 @@ export function buildGalleryPhotosFromAlbum(
     originalKey: string;
     filename: string;
     sortOrder: number;
+    status?: PhotoStatus;
     detectedBibs?: string[];
   }>
 ): GalleryPhoto[] {
@@ -1346,6 +1716,8 @@ export function buildGalleryPhotosFromAlbum(
     title: buildPublicPhotoTitle(albumTitle, photo.sortOrder ?? index),
     aspect: detectAspect(photo.filename),
     sortOrder: photo.sortOrder ?? index,
+    processingStatus:
+      photo.status === PhotoStatus.FAILED ? "failed" : photo.status === PhotoStatus.PROCESSING ? "processing" : "ready",
     detectedBibs: photo.detectedBibs ?? []
   }));
 }
@@ -1574,64 +1946,26 @@ export async function saveAlbumPhotoFromStorage(input: {
     throw new Error("La ruta del original no es valida.");
   }
 
-  const { body, contentType } = await readFromR2(input.originalStorageKey);
-
-  if (body.byteLength !== input.sizeBytes) {
-    throw new Error("La foto cargada no coincide con el tamano esperado.");
-  }
-
   const nextSortOrder = typeof input.sortOrder === "number" ? input.sortOrder : await getNextAlbumPhotoSortOrder(input.albumId);
-  const derivatives = await buildImageDerivatives({
-    buffer: body,
-    fileName: input.filename,
-    contentType: input.contentType ?? contentType
-  });
-  const uniqueBaseName = path.parse(path.basename(parsedOriginalKey.key)).name;
-  const previewObjectKey = `albums/${input.albumId}/previews/${uniqueBaseName}-preview${derivatives.previewExtension}`;
-  const thumbObjectKey = `albums/${input.albumId}/thumbs/${uniqueBaseName}-thumb${derivatives.thumbExtension}`;
-
-  const [previewKey, thumbKey, capturedAt, album] = await Promise.all([
-    uploadToR2({
-      bucket: "derivatives",
-      key: previewObjectKey,
-      body: derivatives.previewBuffer,
-      contentType: derivatives.previewContentType
-    }),
-    uploadToR2({
-      bucket: "derivatives",
-      key: thumbObjectKey,
-      body: derivatives.thumbBuffer,
-      contentType: derivatives.thumbContentType
-    }),
-    extractCapturedAt(body, input.lastModified ?? 0),
-    prisma.album.findUnique({
-      where: { id: input.albumId },
-      select: { coverPhotoId: true }
-    })
-  ]);
+  const capturedAt = input.lastModified && input.lastModified > 0 ? new Date(input.lastModified) : null;
 
   const photo = await prisma.photo.create({
     data: {
       albumId: input.albumId,
       filename: input.filename,
       originalKey: input.originalStorageKey,
-      previewKey,
-      thumbKey,
+      previewKey: null,
+      thumbKey: null,
       capturedAt,
-      width: derivatives.width,
-      height: derivatives.height,
+      width: null,
+      height: null,
       sizeBytes: input.sizeBytes,
       sortOrder: nextSortOrder,
-      status: "READY"
+      status: PhotoStatus.PROCESSING
     }
   });
 
-  if (!album?.coverPhotoId) {
-    await prisma.album.update({
-      where: { id: input.albumId },
-      data: { coverPhotoId: photo.id }
-    });
-  }
+  await assignAlbumCoverIfMissing(input.albumId, photo.id);
 
   return photo;
 }

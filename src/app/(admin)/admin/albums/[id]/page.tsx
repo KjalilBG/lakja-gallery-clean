@@ -5,6 +5,7 @@ import { ArrowLeft, Download, ExternalLink, Eye, FileText, Heart, Settings2, Tra
 
 import { AlbumPhotoWorkspace } from "@/components/admin/album-photo-workspace";
 import { AlbumPhotoUploader } from "@/components/admin/album-photo-uploader";
+import { AlbumPhotoProcessingSync } from "@/components/admin/album-photo-processing-sync";
 import { AlbumSettingsFields } from "@/components/admin/album-settings-fields";
 import { AlbumBibOcrPanel } from "@/components/admin/album-bib-ocr-panel";
 import { ConfirmDeleteAlbumButton } from "@/components/admin/confirm-delete-album-button";
@@ -36,6 +37,8 @@ export default async function AlbumDetailPage({ params, searchParams }: AlbumDet
 
   return (
     <div className="space-y-6">
+      <AlbumPhotoProcessingSync albumId={album.id} enabled={album.processingPhotosCount > 0} />
+
       <div className="flex flex-wrap items-center justify-between gap-3 rounded-[26px] border border-slate-200 bg-white px-5 py-4 shadow-[0_12px_30px_rgba(15,23,42,0.05)]">
         <div className="flex items-center gap-3 text-sm font-bold text-slate-500">
           <Link href="/appfotos/admin/albums" className="inline-flex items-center gap-2 rounded-full border border-slate-200 px-4 py-2 transition hover:border-lime-300 hover:text-slate-900">
@@ -61,6 +64,20 @@ export default async function AlbumDetailPage({ params, searchParams }: AlbumDet
       {resolvedSearchParams.photoDeleted === "1" ? (
         <div className="rounded-[24px] border border-amber-200 bg-amber-50 px-5 py-4 text-sm font-bold text-amber-800">
           La foto fue eliminada del album.
+        </div>
+      ) : null}
+      {album.processingPhotosCount > 0 ? (
+        <div className="rounded-[24px] border border-sky-200 bg-sky-50 px-5 py-4 text-sm font-bold text-sky-800">
+          {album.processingPhotosCount === 1
+            ? "1 foto ya se subio y sigue preparando preview y thumb en segundo plano."
+            : `${album.processingPhotosCount} fotos ya se subieron y siguen preparando preview y thumb en segundo plano.`}
+        </div>
+      ) : null}
+      {album.failedPhotosCount > 0 ? (
+        <div className="rounded-[24px] border border-rose-200 bg-rose-50 px-5 py-4 text-sm font-bold text-rose-800">
+          {album.failedPhotosCount === 1
+            ? "1 foto no pudo generar sus derivados y se marco como fallida."
+            : `${album.failedPhotosCount} fotos no pudieron generar sus derivados y se marcaron como fallidas.`}
         </div>
       ) : null}
       {resolvedSearchParams.ocrError ? (
@@ -101,6 +118,11 @@ export default async function AlbumDetailPage({ params, searchParams }: AlbumDet
               <div className="rounded-[24px] border border-slate-200 bg-slate-50 px-5 py-4">
                 <p className="text-[11px] font-extrabold uppercase tracking-[0.24em] text-slate-400">Fotos</p>
                 <p className="mt-2 text-lg font-black text-slate-900">{album.photoCount}</p>
+                {album.processingPhotosCount > 0 || album.failedPhotosCount > 0 ? (
+                  <p className="mt-1 text-xs font-bold text-slate-500">
+                    {album.processingPhotosCount} procesando · {album.failedPhotosCount} fallidas
+                  </p>
+                ) : null}
               </div>
               <div className="rounded-[24px] border border-slate-200 bg-slate-50 px-5 py-4">
                 <p className="text-[11px] font-extrabold uppercase tracking-[0.24em] text-slate-400">URL publica</p>

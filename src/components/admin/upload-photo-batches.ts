@@ -391,6 +391,17 @@ function calculateOverallPercent(filePercents: number[]) {
   return Math.max(0, Math.min(100, Math.round(totalPercent / filePercents.length)));
 }
 
+function kickPhotoProcessing(albumId: string) {
+  void fetch(`/api/admin/albums/${albumId}/photos/process`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({ action: "process-next" }),
+    keepalive: true
+  }).catch(() => undefined);
+}
+
 export async function uploadPhotoBatches({
   albumId,
   files,
@@ -455,6 +466,7 @@ export async function uploadPhotoBatches({
             });
           }
         });
+        kickPhotoProcessing(albumId);
         completedCount += 1;
       } catch (error) {
         const message = error instanceof Error ? error.message : `No se pudo completar ${currentItem.file.name}.`;

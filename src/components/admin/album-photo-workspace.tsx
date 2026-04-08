@@ -17,6 +17,27 @@ type AlbumPhotoWorkspaceProps = {
 type ViewMode = "comfortable" | "compact";
 type BibFilter = "all" | "pending" | "detected" | "manual";
 
+function getProcessingStatusMeta(photo: GalleryPhoto) {
+  if (photo.processingStatus === "failed") {
+    return {
+      label: "Fallida",
+      className: "bg-rose-500 text-white"
+    };
+  }
+
+  if (photo.processingStatus === "processing") {
+    return {
+      label: "Procesando",
+      className: "bg-amber-400 text-slate-950"
+    };
+  }
+
+  return {
+    label: "Lista",
+    className: "bg-lime-500 text-white"
+  };
+}
+
 function getBibStatus(photo: GalleryPhoto): BibFilter {
   if (photo.bibOcrText === "__manual__") {
     return "manual";
@@ -359,7 +380,10 @@ export function AlbumPhotoWorkspace({ albumId, slug, photos, bibRecognitionEnabl
       </div>
 
       <div className={cn("grid gap-5", viewMode === "compact" ? "grid-cols-2 md:grid-cols-4 xl:grid-cols-6 2xl:grid-cols-8" : "md:grid-cols-2 xl:grid-cols-3")}>
-        {filteredPhotos.map((photo, index) => (
+        {filteredPhotos.map((photo, index) => {
+          const processingMeta = getProcessingStatusMeta(photo);
+
+          return (
           <article
             key={photo.id}
             draggable
@@ -401,6 +425,15 @@ export function AlbumPhotoWorkspace({ albumId, slug, photos, bibRecognitionEnabl
                     Portada
                   </span>
                 ) : null}
+                <span
+                  className={cn(
+                    "rounded-full font-extrabold uppercase tracking-[0.22em] shadow-[0_10px_22px_rgba(15,23,42,0.12)]",
+                    viewMode === "compact" ? "px-2 py-1 text-[9px]" : "px-3 py-2 text-[10px]",
+                    processingMeta.className
+                  )}
+                >
+                  {processingMeta.label}
+                </span>
                 {bibRecognitionEnabled ? (
                   <span
                     className={cn(
@@ -432,7 +465,13 @@ export function AlbumPhotoWorkspace({ albumId, slug, photos, bibRecognitionEnabl
               <div className="space-y-1">
                 <p className={cn("truncate font-bold text-slate-900", viewMode === "compact" ? "text-[11px]" : "text-sm")}>{photo.title}</p>
                 <p className={cn("font-bold uppercase tracking-[0.2em] text-slate-400", viewMode === "compact" ? "text-[9px]" : "text-[11px]")}>
-                  {photo.isCover ? "Vista principal del album" : "Arrastra para reordenar"}
+                  {photo.processingStatus === "processing"
+                    ? "Original guardado. Derivados en cola."
+                    : photo.processingStatus === "failed"
+                      ? "Original guardado. Derivados fallaron."
+                      : photo.isCover
+                        ? "Vista principal del album"
+                        : "Arrastra para reordenar"}
                 </p>
               </div>
 
@@ -536,7 +575,8 @@ export function AlbumPhotoWorkspace({ albumId, slug, photos, bibRecognitionEnabl
               </div>
             </div>
           </article>
-        ))}
+          );
+        })}
       </div>
     </div>
   );

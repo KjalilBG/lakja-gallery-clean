@@ -152,7 +152,7 @@ export function AlbumPhotoUploader({ albumId }: AlbumPhotoUploaderProps) {
 
   const progressHint =
     phase === "processing"
-      ? "La foto actual ya termino de enviarse. Ahora estamos guardando, optimizando y ordenando las fotos."
+      ? "La foto actual ya termino de enviarse. Ahora la estamos registrando y mandando a procesar en segundo plano."
       : queuedFiles.length > 1
         ? `La carga se hace con bloques optimizados para que el navegador y el servidor trabajen con menos esperas. Flujo actual: ${MAX_FILES_PER_REQUEST} foto(s) a la vez y cada foto conserva su lugar para poder retomar si algo falla.`
         : "El porcentaje llegara al 100% solo cuando las fotos esten listas dentro del album.";
