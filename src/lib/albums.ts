@@ -2379,6 +2379,7 @@ export async function getOrCreateAlbumDownloadArchive(input: {
 }) {
   const signature = hashDownloadSignature(
     JSON.stringify({
+      version: 2,
       albumId: input.albumId,
       type: input.type,
       photos: input.photos.map((photo) => ({

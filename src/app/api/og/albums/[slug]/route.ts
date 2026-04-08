@@ -204,28 +204,12 @@ export async function GET(_: Request, context: RouteContext) {
               )
             )
           ),
-          h(
-            "div",
-            {
-              style: {
-                display: "flex",
-                alignItems: "center",
-                gap: "14px",
-                fontSize: 22,
-                color: "rgba(255,255,255,0.76)"
-              }
-            },
-            h("div", {
-              style: {
-                display: "flex",
-                width: "12px",
-                height: "12px",
-                borderRadius: "999px",
-                background: "#6aff94"
-              }
-            }),
-            "Comparte el enlace y deja que el preview haga su magia."
-          )
+          h("div", {
+            style: {
+              display: "flex",
+              height: "24px"
+            }
+          })
         ),
         h(
           "div",
