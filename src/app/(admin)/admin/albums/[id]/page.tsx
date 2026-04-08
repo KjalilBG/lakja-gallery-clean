@@ -38,7 +38,7 @@ export default async function AlbumDetailPage({ params, searchParams }: AlbumDet
 
   return (
     <div className="space-y-6">
-      <AlbumPhotoProcessingSync albumId={album.id} enabled={album.processingPhotosCount > 0} />
+      <AlbumPhotoProcessingSync albumId={album.id} enabled={album.processingPhotosCount > 0 || album.retryablePhotosCount > 0} />
 
       <div className="flex flex-wrap items-center justify-between gap-3 rounded-[26px] border border-slate-200 bg-white px-5 py-4 shadow-[0_12px_30px_rgba(15,23,42,0.05)]">
         <div className="flex items-center gap-3 text-sm font-bold text-slate-500">

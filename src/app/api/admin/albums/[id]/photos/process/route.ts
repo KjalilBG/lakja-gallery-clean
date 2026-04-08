@@ -2,7 +2,7 @@ import { revalidatePath } from "next/cache";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 
-import { processNextAlbumPhotoPreviewBatch } from "@/lib/albums";
+import { processNextAlbumPhotoPreviewBatch, retryAlbumMissingPhotoDerivatives } from "@/lib/albums";
 import { ensureAdminApiRequest } from "@/lib/auth-guard";
 import { checkRateLimit } from "@/lib/rate-limit";
 import { sanitizeJsonValue } from "@/lib/sanitize";
@@ -34,12 +34,12 @@ export async function POST(
     const body = bodySchema.parse(sanitizeJsonValue(await request.json().catch(() => ({}))));
     const startedAt = Date.now();
     let iterations = 0;
-    let result = await processNextAlbumPhotoPreviewBatch(id);
+    let result = await runOrRecoverPreviewBatch(id);
 
     if (body.action === "drain") {
       while (!result.completed && result.remaining > 0 && Date.now() - startedAt < DRAIN_TIME_BUDGET_MS) {
         iterations += 1;
-        result = await processNextAlbumPhotoPreviewBatch(id);
+        result = await runOrRecoverPreviewBatch(id);
       }
     }
 
@@ -57,5 +57,39 @@ export async function POST(
       { ok: false, error: error instanceof Error ? error.message : "No se pudo procesar la cola de previews." },
       { status: 400 }
     );
+  }
+}
+
+async function runOrRecoverPreviewBatch(albumId: string) {
+  try {
+    return await processNextAlbumPhotoPreviewBatch(albumId);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "";
+
+    if (message !== "No hay una cola de previews activa para este album.") {
+      throw error;
+    }
+
+    const recovered = await retryAlbumMissingPhotoDerivatives(albumId);
+
+    if (recovered.retriedCount === 0) {
+      return {
+        jobId: null,
+        processedInBatch: 0,
+        completedInBatch: 0,
+        failedInBatch: 0,
+        remaining: 0,
+        completed: true,
+        totals: null,
+        recovered: false
+      };
+    }
+
+    const result = await processNextAlbumPhotoPreviewBatch(albumId);
+
+    return {
+      ...result,
+      recovered: true
+    };
   }
 }
