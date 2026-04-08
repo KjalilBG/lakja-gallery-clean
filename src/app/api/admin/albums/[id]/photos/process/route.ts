@@ -8,9 +8,10 @@ import { checkRateLimit } from "@/lib/rate-limit";
 import { sanitizeJsonValue } from "@/lib/sanitize";
 
 export const maxDuration = 300;
+const DRAIN_TIME_BUDGET_MS = 20_000;
 
 const bodySchema = z.object({
-  action: z.enum(["process-next"]).default("process-next")
+  action: z.enum(["process-next", "drain"]).default("drain")
 });
 
 export async function POST(
@@ -30,8 +31,17 @@ export async function POST(
   const { id } = await params;
 
   try {
-    bodySchema.parse(sanitizeJsonValue(await request.json().catch(() => ({}))));
-    const result = await processNextAlbumPhotoPreviewBatch(id);
+    const body = bodySchema.parse(sanitizeJsonValue(await request.json().catch(() => ({}))));
+    const startedAt = Date.now();
+    let iterations = 0;
+    let result = await processNextAlbumPhotoPreviewBatch(id);
+
+    if (body.action === "drain") {
+      while (!result.completed && result.remaining > 0 && Date.now() - startedAt < DRAIN_TIME_BUDGET_MS) {
+        iterations += 1;
+        result = await processNextAlbumPhotoPreviewBatch(id);
+      }
+    }
 
     revalidatePath(`/appfotos/admin/albums/${id}`);
     revalidatePath("/appfotos/admin/albums");
@@ -39,6 +49,7 @@ export async function POST(
 
     return NextResponse.json({
       ok: true,
+      iterations,
       ...result
     });
   } catch (error) {

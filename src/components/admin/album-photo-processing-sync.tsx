@@ -32,7 +32,7 @@ export function AlbumPhotoProcessingSync({ albumId, enabled }: AlbumPhotoProcess
             headers: {
               "Content-Type": "application/json"
             },
-            body: JSON.stringify({ action: "process-next" })
+            body: JSON.stringify({ action: "drain" })
           });
 
           if (!response.ok) {
@@ -58,7 +58,7 @@ export function AlbumPhotoProcessingSync({ albumId, enabled }: AlbumPhotoProcess
           break;
         }
 
-        await wait(900);
+        await wait(1200);
       }
     }
 
