@@ -1,25 +1,18 @@
+import { NextRequest, NextResponse } from "next/server";
 import path from "node:path";
 
-import JSZip from "jszip";
-import { NextRequest, NextResponse } from "next/server";
-
-import { getDownloadableAlbumPhotos, readPhotoBinary, recordAlbumDownload } from "@/lib/albums";
+import {
+  getDownloadableAlbumPhotos,
+  getOrCreateAlbumDownloadArchive,
+  getSignedPhotoDownloadUrl,
+  recordAlbumDownload
+} from "@/lib/albums";
 import { checkRateLimit, getSafeErrorMessage } from "@/lib/rate-limit";
 import { sanitizeTextInput } from "@/lib/sanitize";
 
 type RouteContext = {
   params: Promise<{ slug: string }>;
 };
-
-function cleanZipName(input: string) {
-  return input
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .replace(/[^a-zA-Z0-9-_ ]+/g, "")
-    .trim()
-    .replace(/\s+/g, "-")
-    .toLowerCase();
-}
 
 export async function GET(request: NextRequest, context: RouteContext) {
   const rateLimitResponse = checkRateLimit(request, {
@@ -70,10 +63,9 @@ export async function GET(request: NextRequest, context: RouteContext) {
       if (!photo) {
         return NextResponse.json({ error: "No se encontro la foto solicitada." }, { status: 404 });
       }
-
-      const file = await readPhotoBinary(photo.originalKey);
       const extension = path.extname(photo.filename) || ".jpg";
-      const downloadName = `${buildDownloadPhotoName(album.title, photo.sortOrder)}${extension}`;
+      const downloadName = `${photo.sortOrder + 1} - ${album.title}${extension}`;
+      const signedUrl = await getSignedPhotoDownloadUrl(photo.originalKey, downloadName);
 
       if (sessionId) {
         await recordAlbumDownload({
@@ -84,12 +76,7 @@ export async function GET(request: NextRequest, context: RouteContext) {
         });
       }
 
-      return new NextResponse(new Uint8Array(file.body), {
-        headers: {
-          "Content-Type": file.contentType,
-          "Content-Disposition": `attachment; filename="${downloadName}"`
-        }
-      });
+      return NextResponse.redirect(signedUrl, { status: 302 });
     }
 
     const selectedPhotos =
@@ -98,19 +85,12 @@ export async function GET(request: NextRequest, context: RouteContext) {
     if (selectedPhotos.length === 0) {
       return NextResponse.json({ error: "No hay fotos para descargar." }, { status: 400 });
     }
-
-    const zip = new JSZip();
-
-    for (const [index, photo] of selectedPhotos.entries()) {
-      const fileBuffer = await readPhotoBinary(photo.originalKey);
-      const extension = path.extname(photo.filename) || ".jpg";
-      const albumBasedName = `${index + 1} - ${album.title}${extension}`;
-
-      zip.file(albumBasedName, fileBuffer.body);
-    }
-
-    const zipBuffer = await zip.generateAsync({ type: "nodebuffer" });
-    const zipName = `${cleanZipName(album.title)}-${type === "favorites" ? "favoritas" : "album"}.zip`;
+    const archive = await getOrCreateAlbumDownloadArchive({
+      albumId: album.id,
+      albumTitle: album.title,
+      type: type === "favorites" ? "favorites" : "all",
+      photos: selectedPhotos
+    });
 
     if (sessionId) {
       await recordAlbumDownload({
@@ -120,17 +100,8 @@ export async function GET(request: NextRequest, context: RouteContext) {
       });
     }
 
-    return new NextResponse(new Uint8Array(zipBuffer), {
-      headers: {
-        "Content-Type": "application/zip",
-        "Content-Disposition": `attachment; filename="${zipName}"`
-      }
-    });
+    return NextResponse.redirect(archive.signedUrl, { status: 302 });
   } catch (error) {
     return NextResponse.json({ error: getSafeErrorMessage("No se pudo preparar la descarga.", error) }, { status: 500 });
   }
-}
-
-function buildDownloadPhotoName(albumTitle: string, sortOrder: number) {
-  return `${sortOrder + 1} - ${albumTitle}`;
 }

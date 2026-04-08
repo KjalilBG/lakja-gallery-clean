@@ -1,4 +1,5 @@
 import { AlbumStatus, AlbumVisibility, CoverPosition, FavoriteSelectionStatus, JobStatus, JobType, PhotoStatus } from "@prisma/client";
+import { createHash } from "node:crypto";
 import path from "node:path";
 import { mkdir, rm, unlink, writeFile } from "node:fs/promises";
 
@@ -8,7 +9,7 @@ import type { AlbumDetail, AlbumSummary, GalleryPhoto } from "@/features/albums/
 import { detectBibs } from "@/lib/bib-ocr";
 import { buildImageDerivatives } from "@/lib/image";
 import { prisma } from "@/lib/prisma";
-import { isR2Configured, parseStorageKey, readFromR2, removeFromR2, toMediaRoute, uploadToR2 } from "@/lib/r2";
+import { buildR2StorageKey, createSignedDownloadUrl, existsInR2, isR2Configured, parseStorageKey, readFromR2, removeFromR2, toMediaRoute, uploadToR2 } from "@/lib/r2";
 
 function createSlug(input: string) {
   return input
@@ -69,6 +70,20 @@ function detectAspect(fileName: string): GalleryPhoto["aspect"] {
 
 function buildPublicPhotoTitle(albumTitle: string, sortOrder: number) {
   return `${sortOrder + 1} - ${albumTitle}`;
+}
+
+function cleanZipName(input: string) {
+  return input
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-zA-Z0-9-_ ]+/g, "")
+    .trim()
+    .replace(/\s+/g, "-")
+    .toLowerCase();
+}
+
+function hashDownloadSignature(input: string) {
+  return createHash("sha1").update(input).digest("hex").slice(0, 16);
 }
 
 type BibJobPayload = {
@@ -190,6 +205,21 @@ async function assignAlbumCoverIfMissing(albumId: string, fallbackPhotoId: strin
       data: { coverPhotoId: fallbackPhotoId }
     });
   }
+}
+
+async function findAlbumPhotoByFilename(albumId: string, filename: string) {
+  return prisma.photo.findFirst({
+    where: {
+      albumId,
+      filename: {
+        equals: filename.trim(),
+        mode: "insensitive"
+      }
+    },
+    select: {
+      id: true
+    }
+  });
 }
 
 export async function reserveAlbumPhotoSortOrders(albumId: string, totalFiles: number) {
@@ -1399,8 +1429,8 @@ export async function updatePhotoBibsManually(albumId: string, photoId: string, 
   };
 }
 
-export async function enqueueAlbumPhotoPreviewJob(albumId: string, photoId: string, batchSize = 1) {
-  const safeBatchSize = Math.min(Math.max(batchSize, 1), 4);
+export async function enqueueAlbumPhotoPreviewJob(albumId: string, photoId: string, batchSize = 3) {
+  const safeBatchSize = Math.min(Math.max(batchSize, 2), 6);
   const photo = await prisma.photo.findUnique({
     where: { id: photoId },
     select: {
@@ -1643,23 +1673,13 @@ export async function processNextAlbumPhotoPreviewBatch(albumId: string) {
     };
   }
 
-  let processedInBatch = 0;
-  let completedInBatch = 0;
-  let failedInBatch = 0;
+  const batchResults = await Promise.allSettled(photoIds.map((photoId) => processSingleAlbumPhotoPreview(albumId, photoId)));
 
-  for (const photoId of photoIds) {
-    try {
-      const result = await processSingleAlbumPhotoPreview(albumId, photoId);
-      processedInBatch += 1;
-
-      if (result.status === "completed" || result.status === "ready") {
-        completedInBatch += 1;
-      }
-    } catch {
-      processedInBatch += 1;
-      failedInBatch += 1;
-    }
-  }
+  const processedInBatch = batchResults.length;
+  const completedInBatch = batchResults.filter(
+    (result) => result.status === "fulfilled" && (result.value.status === "completed" || result.value.status === "ready")
+  ).length;
+  const failedInBatch = batchResults.filter((result) => result.status === "rejected").length;
 
   const nextPayload: PreviewJobPayload = {
     ...payload,
@@ -1684,6 +1704,30 @@ export async function processNextAlbumPhotoPreviewBatch(albumId: string) {
       runAt: new Date()
     }
   });
+
+  if (nextStatus === JobStatus.COMPLETED) {
+    const album = await prisma.album.findUnique({
+      where: { id: albumId },
+      select: {
+        title: true
+      }
+    });
+
+    if (album) {
+      const readyPhotoCount = await prisma.photo.count({
+        where: {
+          albumId,
+          status: PhotoStatus.READY
+        }
+      });
+
+      await sendAlbumProcessingCompletedEmail({
+        albumId,
+        albumTitle: album.title,
+        photoCount: readyPhotoCount
+      });
+    }
+  }
 
   return {
     jobId,
@@ -1946,6 +1990,12 @@ export async function saveAlbumPhotoFromStorage(input: {
     throw new Error("La ruta del original no es valida.");
   }
 
+  const duplicatePhoto = await findAlbumPhotoByFilename(input.albumId, input.filename);
+
+  if (duplicatePhoto) {
+    throw new Error("Ya existe una foto con ese nombre en este album.");
+  }
+
   const nextSortOrder = typeof input.sortOrder === "number" ? input.sortOrder : await getNextAlbumPhotoSortOrder(input.albumId);
   const capturedAt = input.lastModified && input.lastModified > 0 ? new Date(input.lastModified) : null;
 
@@ -2125,6 +2175,7 @@ export async function getDownloadableAlbumPhotos(slug: string) {
   const album = await prisma.album.findUnique({
     where: { slug },
     select: {
+      id: true,
       title: true,
       allowSingleDownload: true,
       allowFavoritesDownload: true,
@@ -2146,6 +2197,108 @@ export async function getDownloadableAlbumPhotos(slug: string) {
   }
 
   return album;
+}
+
+export async function getSignedPhotoDownloadUrl(storageKey: string, fileName: string) {
+  return createSignedDownloadUrl(storageKey, 60 * 10, {
+    fileName
+  });
+}
+
+export async function getOrCreateAlbumDownloadArchive(input: {
+  albumId: string;
+  albumTitle: string;
+  type: "favorites" | "all";
+  photos: Array<{
+    id: string;
+    filename: string;
+    originalKey: string;
+    sortOrder: number;
+  }>;
+}) {
+  const signature = hashDownloadSignature(
+    JSON.stringify({
+      albumId: input.albumId,
+      type: input.type,
+      photos: input.photos.map((photo) => ({
+        id: photo.id,
+        filename: photo.filename,
+        sortOrder: photo.sortOrder,
+        originalKey: photo.originalKey
+      }))
+    })
+  );
+
+  const zipName = `${cleanZipName(input.albumTitle)}-${input.type === "favorites" ? "favoritas" : "album"}.zip`;
+  const objectKey = `downloads/${input.albumId}/${input.type}-${signature}.zip`;
+  const storageKey = buildR2StorageKey("originals", objectKey);
+
+  if (!(await existsInR2(storageKey))) {
+    const JSZip = (await import("jszip")).default;
+    const zip = new JSZip();
+
+    for (const [index, photo] of input.photos.entries()) {
+      const fileBuffer = await readPhotoBinary(photo.originalKey);
+      const extension = path.extname(photo.filename) || ".jpg";
+      const albumBasedName = `${index + 1} - ${input.albumTitle}${extension}`;
+
+      zip.file(albumBasedName, fileBuffer.body);
+    }
+
+    const zipBuffer = await zip.generateAsync({ type: "nodebuffer" });
+
+    await uploadToR2({
+      bucket: "originals",
+      key: objectKey,
+      body: zipBuffer,
+      contentType: "application/zip"
+    });
+  }
+
+  return {
+    fileName: zipName,
+    storageKey,
+    signedUrl: await createSignedDownloadUrl(storageKey, 60 * 10, {
+      fileName: zipName,
+      contentType: "application/zip"
+    })
+  };
+}
+
+async function sendAlbumProcessingCompletedEmail(input: {
+  albumId: string;
+  albumTitle: string;
+  photoCount: number;
+}) {
+  const apiKey = process.env.RESEND_API_KEY?.trim();
+
+  if (!apiKey) {
+    return;
+  }
+
+  const to = process.env.ALBUM_PROCESSING_NOTIFY_EMAIL?.trim() || "kjalilbeyruti@gmail.com";
+  const from = process.env.RESEND_FROM_EMAIL?.trim() || "onboarding@resend.dev";
+
+  await fetch("https://api.resend.com/emails", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({
+      from,
+      to: [to],
+      subject: `Album listo: ${input.albumTitle}`,
+      html: `
+        <div style="font-family:Arial,sans-serif;line-height:1.5;color:#0f172a">
+          <h2 style="margin:0 0 12px">Album procesado por completo</h2>
+          <p style="margin:0 0 8px"><strong>${input.albumTitle}</strong> ya termino de generar todos sus previews y thumbnails.</p>
+          <p style="margin:0 0 8px">Fotos listas: ${input.photoCount}</p>
+          <p style="margin:0">Puedes revisarlo en tu panel de AppFotos cuando quieras.</p>
+        </div>
+      `
+    })
+  }).catch(() => undefined);
 }
 
 export async function deleteAlbum(albumId: string) {

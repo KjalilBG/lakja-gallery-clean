@@ -364,7 +364,7 @@ export default async function AlbumDetailPage({ params, searchParams }: AlbumDet
               <p className="text-sm text-slate-500">Arrastra archivos, prepara una cola y sube con progreso real al album.</p>
             </div>
           </div>
-          <AlbumPhotoUploader albumId={album.id} />
+          <AlbumPhotoUploader albumId={album.id} existingFileNames={album.photos.map((photo) => photo.title)} />
         </div>
 
         <aside className="space-y-4">

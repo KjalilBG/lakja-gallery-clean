@@ -8,6 +8,7 @@ import { MAX_FILES_PER_REQUEST, type UploadQueueItem, type UploadQueuePhase, upl
 
 type AlbumPhotoUploaderProps = {
   albumId: string;
+  existingFileNames?: string[];
 };
 
 type UploadPhase = "idle" | "uploading" | "processing";
@@ -15,9 +16,14 @@ type QueuedPhoto = UploadQueueItem & {
   status: UploadQueuePhase;
   progress: number;
   error?: string;
+  isLocked?: boolean;
 };
 
-export function AlbumPhotoUploader({ albumId }: AlbumPhotoUploaderProps) {
+function normalizeFileName(value: string) {
+  return value.trim().toLocaleLowerCase("es-MX");
+}
+
+export function AlbumPhotoUploader({ albumId, existingFileNames = [] }: AlbumPhotoUploaderProps) {
   const router = useRouter();
   const inputRef = useRef<HTMLInputElement | null>(null);
   const [queuedFiles, setQueuedFiles] = useState<QueuedPhoto[]>([]);
@@ -28,6 +34,10 @@ export function AlbumPhotoUploader({ albumId }: AlbumPhotoUploaderProps) {
   const [uploadError, setUploadError] = useState("");
   const [batchLabel, setBatchLabel] = useState("");
   const [uploadSummary, setUploadSummary] = useState<{ completed: number; failed: number } | null>(null);
+  const existingFileNamesSet = useMemo(
+    () => new Set(existingFileNames.map((fileName) => normalizeFileName(fileName))),
+    [existingFileNames]
+  );
 
   const totalSizeLabel = useMemo(() => {
     const totalBytes = queuedFiles.reduce((sum, file) => sum + file.file.size, 0);
@@ -39,15 +49,40 @@ export function AlbumPhotoUploader({ albumId }: AlbumPhotoUploaderProps) {
     if (!fileList) return;
 
     const incomingFiles = Array.from(fileList).filter((file) => file.type.startsWith("image/"));
-    setQueuedFiles((current) => [
-      ...current,
-      ...incomingFiles.map((file) => ({
-        id: window.crypto.randomUUID(),
-        file,
-        status: "queued" as const,
-        progress: 0
-      }))
-    ]);
+    setQueuedFiles((current) => {
+      const seenNames = new Set(current.map((item) => normalizeFileName(item.file.name)));
+
+      return [
+        ...current,
+        ...incomingFiles.map((file) => {
+          const normalizedName = normalizeFileName(file.name);
+          const alreadyInAlbum = existingFileNamesSet.has(normalizedName);
+          const alreadyInQueue = seenNames.has(normalizedName);
+
+          seenNames.add(normalizedName);
+
+          if (alreadyInAlbum || alreadyInQueue) {
+            return {
+              id: window.crypto.randomUUID(),
+              file,
+              status: "error" as const,
+              progress: 0,
+              error: alreadyInAlbum
+                ? "Esta foto ya existe en el album."
+                : "Este nombre ya esta repetido en la cola.",
+              isLocked: true
+            };
+          }
+
+          return {
+            id: window.crypto.randomUUID(),
+            file,
+            status: "queued" as const,
+            progress: 0
+          };
+        })
+      ];
+    });
   }
 
   function removeQueuedFile(fileId: string) {
@@ -58,8 +93,8 @@ export function AlbumPhotoUploader({ albumId }: AlbumPhotoUploaderProps) {
     if (queuedFiles.length === 0 || isUploading) return;
 
     const filesToUpload = retryFailedOnly
-      ? queuedFiles.filter((item) => item.status === "queued" || item.status === "error")
-      : queuedFiles;
+      ? queuedFiles.filter((item) => (item.status === "queued" || item.status === "error") && !item.isLocked)
+      : queuedFiles.filter((item) => !item.isLocked);
 
     if (filesToUpload.length === 0) return;
 
@@ -235,7 +270,9 @@ export function AlbumPhotoUploader({ albumId }: AlbumPhotoUploaderProps) {
                       file.status === "done"
                         ? "text-lime-600"
                         : file.status === "error"
-                          ? "text-rose-600"
+                          ? file.isLocked
+                            ? "text-amber-600"
+                            : "text-rose-600"
                           : file.status === "processing"
                             ? "text-fuchsia-600"
                             : file.status === "uploading"
@@ -245,7 +282,9 @@ export function AlbumPhotoUploader({ albumId }: AlbumPhotoUploaderProps) {
                       {file.status === "done"
                         ? "Lista"
                         : file.status === "error"
-                          ? "Error"
+                          ? file.isLocked
+                            ? "Ya existe"
+                            : "Error"
                           : file.status === "processing"
                             ? "Procesando"
                             : file.status === "uploading"
@@ -269,7 +308,9 @@ export function AlbumPhotoUploader({ albumId }: AlbumPhotoUploaderProps) {
                       file.status === "done"
                         ? "bg-lime-500"
                         : file.status === "error"
-                          ? "bg-rose-500"
+                          ? file.isLocked
+                            ? "bg-amber-400"
+                            : "bg-rose-500"
                           : "bg-[linear-gradient(90deg,#84cc16,#d946ef)]"
                     }`}
                     style={{ width: `${file.progress}%` }}

@@ -6,6 +6,7 @@ import {
   CreateMultipartUploadCommand,
   DeleteObjectCommand,
   GetObjectCommand,
+  HeadObjectCommand,
   PutObjectCommand,
   S3Client,
   UploadPartCommand
@@ -197,6 +198,57 @@ export async function createSignedMultipartPartUrl(params: {
     }),
     { expiresIn: 60 * 15 }
   );
+}
+
+export async function createSignedDownloadUrl(
+  storageKey: string,
+  expiresIn = 60 * 15,
+  options?: {
+    fileName?: string;
+    contentType?: string;
+  }
+) {
+  const parsed = parseStorageKey(storageKey);
+
+  if (!parsed) {
+    throw new Error("Storage key invalida.");
+  }
+
+  const r2Client = getClient();
+
+  return getSignedUrl(
+    r2Client,
+    new GetObjectCommand({
+      Bucket: parsed.bucket,
+      Key: parsed.key,
+      ResponseContentDisposition: options?.fileName ? `attachment; filename="${options.fileName}"` : undefined,
+      ResponseContentType: options?.contentType
+    }),
+    { expiresIn }
+  );
+}
+
+export async function existsInR2(storageKey: string) {
+  const parsed = parseStorageKey(storageKey);
+
+  if (!parsed) {
+    return false;
+  }
+
+  const r2Client = getClient();
+
+  try {
+    await r2Client.send(
+      new HeadObjectCommand({
+        Bucket: parsed.bucket,
+        Key: parsed.key
+      })
+    );
+
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 export async function completeMultipartUpload(params: {
