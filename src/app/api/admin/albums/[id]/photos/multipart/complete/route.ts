@@ -89,6 +89,17 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
 
     return NextResponse.json({ ok: true, photoId: photo.id, status: "PROCESSING" });
   } catch (error) {
+    console.error("[admin-upload-multipart-complete] failed", {
+      albumId: parsedBody?.albumId ?? null,
+      objectKey: parsedBody?.objectKey ?? null,
+      uploadId: parsedBody?.uploadId ?? null,
+      parts: parsedBody?.parts.length ?? 0,
+      completedStorageKey,
+      createdPhotoId,
+      error: error instanceof Error ? error.message : String(error),
+      stack: error instanceof Error ? error.stack : undefined
+    });
+
     if (parsedBody) {
       if (createdPhotoId) {
         await prisma.photo.delete({ where: { id: createdPhotoId } }).catch(() => undefined);

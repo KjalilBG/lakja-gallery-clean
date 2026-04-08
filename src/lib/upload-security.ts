@@ -13,7 +13,10 @@ const allowedMimeTypes = new Set([
 const allowedExtensions = new Set([".jpg", ".jpeg", ".png", ".webp", ".heic", ".heif", ".avif", ".tif", ".tiff"]);
 
 export const MAX_PHOTO_FILE_SIZE_BYTES = 30 * 1024 * 1024;
-export const MAX_PHOTO_CHUNK_SIZE_BYTES = 4 * 1024 * 1024;
+// R2/S3 multipart uploads require every non-final part to be at least 5 MiB.
+// Using 8 MiB avoids completeMultipartUpload failures on 4-8 MiB photos and
+// also reduces request overhead for larger batches.
+export const MAX_PHOTO_CHUNK_SIZE_BYTES = 8 * 1024 * 1024;
 export const MAX_PHOTOS_PER_REQUEST = 10;
 
 export function isAllowedImageExtension(fileName: string) {
