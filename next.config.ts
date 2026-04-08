@@ -35,6 +35,8 @@ const securityHeaders = [
 ];
 
 const nextConfig: NextConfig = {
+  htmlLimitedBots:
+    /(?:bot|crawl|slurp|spider|facebookexternalhit|facebot|whatsapp|telegrambot|slackbot|discordbot|linkedinbot|twitterbot)/i,
   experimental: {
     serverActions: {
       bodySizeLimit: "50mb"
