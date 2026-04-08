@@ -84,7 +84,6 @@ export default async function AlbumDetailPage({ params, searchParams }: AlbumDet
           <AlbumRetryDerivativesButton
             albumId={album.id}
             slug={album.slug}
-            disabled={album.processingPhotosCount > 0}
           />
         </div>
       ) : null}
