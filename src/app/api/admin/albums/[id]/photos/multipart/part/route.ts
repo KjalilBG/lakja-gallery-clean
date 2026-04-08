@@ -3,8 +3,8 @@ import { z } from "zod";
 
 import { ensureAdminApiRequest } from "@/lib/auth-guard";
 import { checkRateLimit, getSafeErrorMessage } from "@/lib/rate-limit";
-import { isR2Configured, uploadMultipartPart } from "@/lib/r2";
-import { sanitizeTextInput } from "@/lib/sanitize";
+import { createSignedMultipartPartUrl, isR2Configured } from "@/lib/r2";
+import { sanitizeJsonValue } from "@/lib/sanitize";
 import { MAX_PHOTO_CHUNK_SIZE_BYTES } from "@/lib/upload-security";
 
 export const maxDuration = 60;
@@ -13,7 +13,7 @@ const paramsSchema = z.object({
   albumId: z.string().cuid(),
   uploadId: z.string().min(1),
   objectKey: z.string().min(1),
-  partNumber: z.coerce.number().int().min(1)
+  partNumber: z.number().int().min(1)
 });
 
 export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
@@ -33,40 +33,27 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
 
   try {
     const { id } = await params;
-    const formData = await request.formData();
-    const body = paramsSchema.parse({
-      albumId: sanitizeTextInput(String(formData.get("albumId") ?? "")),
-      uploadId: sanitizeTextInput(String(formData.get("uploadId") ?? "")),
-      objectKey: sanitizeTextInput(String(formData.get("objectKey") ?? ""), { maxLength: 2048 }),
-      partNumber: sanitizeTextInput(String(formData.get("partNumber") ?? ""))
-    });
+    const body = paramsSchema.parse(sanitizeJsonValue(await request.json()));
 
     if (body.albumId !== id) {
       return NextResponse.json({ ok: false, error: "Album invalido." }, { status: 400 });
     }
 
-    const chunk = formData.get("chunk");
-
-    if (!(chunk instanceof File) || chunk.size === 0) {
-      return NextResponse.json({ ok: false, error: "No llego el fragmento." }, { status: 400 });
-    }
-
-    if (chunk.size > MAX_PHOTO_CHUNK_SIZE_BYTES) {
-      return NextResponse.json({ ok: false, error: "El fragmento excede el limite permitido." }, { status: 400 });
-    }
-
-    const etag = await uploadMultipartPart({
+    const signedUrl = await createSignedMultipartPartUrl({
       bucket: "originals",
       key: body.objectKey,
       uploadId: body.uploadId,
-      partNumber: body.partNumber,
-      body: Buffer.from(await chunk.arrayBuffer()),
+      partNumber: body.partNumber
     });
 
-    return NextResponse.json({ ok: true, etag });
+    return NextResponse.json({
+      ok: true,
+      signedUrl,
+      maxChunkSizeBytes: MAX_PHOTO_CHUNK_SIZE_BYTES
+    });
   } catch (error) {
     return NextResponse.json(
-      { ok: false, error: getSafeErrorMessage("No se pudo subir el fragmento.", error) },
+      { ok: false, error: getSafeErrorMessage("No se pudo firmar el fragmento.", error) },
       { status: 400 }
     );
   }

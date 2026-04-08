@@ -10,6 +10,7 @@ import {
   S3Client,
   UploadPartCommand
 } from "@aws-sdk/client-s3";
+import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 
 const accountId = process.env.R2_ACCOUNT_ID ?? "";
 const accessKeyId = process.env.R2_ACCESS_KEY_ID ?? "";
@@ -176,6 +177,26 @@ export async function uploadMultipartPart(params: {
   }
 
   return response.ETag;
+}
+
+export async function createSignedMultipartPartUrl(params: {
+  bucket: BucketKind;
+  key: string;
+  uploadId: string;
+  partNumber: number;
+}) {
+  const r2Client = getClient();
+
+  return getSignedUrl(
+    r2Client,
+    new UploadPartCommand({
+      Bucket: r2Buckets[params.bucket],
+      Key: params.key,
+      UploadId: params.uploadId,
+      PartNumber: params.partNumber
+    }),
+    { expiresIn: 60 * 15 }
+  );
 }
 
 export async function completeMultipartUpload(params: {

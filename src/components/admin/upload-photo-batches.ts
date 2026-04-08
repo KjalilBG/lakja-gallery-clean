@@ -37,6 +37,12 @@ type MultipartPart = {
   etag: string;
 };
 
+type MultipartPartSignatureResponse = {
+  ok: true;
+  signedUrl: string;
+  maxChunkSizeBytes: number;
+};
+
 type SortOrderReservationResponse = {
   ok: true;
   sortOrders: number[];
@@ -203,55 +209,73 @@ async function uploadChunk(params: {
   } = params;
 
   return retryOperation(
-    () =>
-      new Promise<string>((resolve, reject) => {
-    const formData = new FormData();
-    formData.append("albumId", albumId);
-    formData.append("uploadId", uploadId);
-    formData.append("objectKey", objectKey);
-    formData.append("partNumber", String(partNumber));
-    formData.append("chunk", chunk, `${item.file.name}.part-${partNumber}`);
-
-    const request = new XMLHttpRequest();
-    request.open("POST", `/api/admin/albums/${albumId}/photos/multipart/part`);
-
-    request.upload.onprogress = (event) => {
-      if (!event.lengthComputable) return;
-
-      const bytesUploaded = uploadedBytesBeforeChunk + event.loaded;
-      const uploadRatio = bytesUploaded / fileSize;
-      const overallProgress = ((fileIndex + uploadRatio * 0.88) / totalFiles) * 100;
-
-      onProgress?.({
-        fileId: item.id,
-        fileName: item.file.name,
-        fileIndex: fileIndex + 1,
-        totalFiles,
-        overallPercent: Math.min(98, Math.round(overallProgress)),
-        filePercent: Math.min(92, Math.round(uploadRatio * 90)),
-        phase: "uploading"
+    async () => {
+      const signatureResponse = await fetch(`/api/admin/albums/${albumId}/photos/multipart/part`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          albumId,
+          uploadId,
+          objectKey,
+          partNumber
+        })
       });
-    };
 
-    request.onload = () => {
-      if (request.status >= 200 && request.status < 300) {
-        const response = JSON.parse(request.responseText) as { etag?: string };
-
-        if (!response.etag) {
-          reject(new Error(`R2 no confirmo el fragmento de ${item.file.name}.`));
-          return;
-        }
-
-        resolve(response.etag);
-        return;
+      if (!signatureResponse.ok) {
+        const errorResponse = (await signatureResponse.json().catch(() => null)) as { error?: string } | null;
+        throw new Error(errorResponse?.error || `No se pudo preparar ${item.file.name}.`);
       }
 
-      reject(new Error(`No se pudo subir ${item.file.name}.`));
-    };
+      const signatureData = (await signatureResponse.json()) as MultipartPartSignatureResponse;
 
-    request.onerror = () => reject(new Error(`Fallo la carga de ${item.file.name}.`));
-        request.send(formData);
-      })
+      return new Promise<string>((resolve, reject) => {
+        const request = new XMLHttpRequest();
+        request.open("PUT", signatureData.signedUrl);
+
+        request.upload.onprogress = (event) => {
+          if (!event.lengthComputable) return;
+
+          const bytesUploaded = uploadedBytesBeforeChunk + event.loaded;
+          const uploadRatio = bytesUploaded / fileSize;
+          const overallProgress = ((fileIndex + uploadRatio * 0.88) / totalFiles) * 100;
+
+          onProgress?.({
+            fileId: item.id,
+            fileName: item.file.name,
+            fileIndex: fileIndex + 1,
+            totalFiles,
+            overallPercent: Math.min(98, Math.round(overallProgress)),
+            filePercent: Math.min(92, Math.round(uploadRatio * 90)),
+            phase: "uploading"
+          });
+        };
+
+        request.onload = () => {
+          if (request.status >= 200 && request.status < 300) {
+            const etag = request.getResponseHeader("ETag")?.replaceAll('"', "");
+
+            if (!etag) {
+              reject(
+                new Error(
+                  `R2 no devolvio el ETag de ${item.file.name}. Revisa el CORS del bucket para exponer el header ETag.`
+                )
+              );
+              return;
+            }
+
+            resolve(etag);
+            return;
+          }
+
+          reject(new Error(`No se pudo subir ${item.file.name} a R2.`));
+        };
+
+        request.onerror = () => reject(new Error(`Fallo la carga directa de ${item.file.name}.`));
+        request.send(chunk);
+      });
+    }
   );
 }
 
