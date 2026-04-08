@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import path from "node:path";
 
 import {
+  buildBrandedPhotoFileName,
   getDownloadableAlbumPhotos,
   getOrCreateAlbumDownloadArchive,
   getSignedPhotoDownloadUrl,
@@ -64,7 +65,7 @@ export async function GET(request: NextRequest, context: RouteContext) {
         return NextResponse.json({ error: "No se encontro la foto solicitada." }, { status: 404 });
       }
       const extension = path.extname(photo.filename) || ".jpg";
-      const downloadName = `${photo.sortOrder + 1} - ${album.title}${extension}`;
+      const downloadName = buildBrandedPhotoFileName(`${photo.sortOrder + 1} - ${album.title}`, extension);
       const signedUrl = await getSignedPhotoDownloadUrl(photo.originalKey, downloadName);
 
       if (sessionId) {

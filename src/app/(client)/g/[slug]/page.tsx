@@ -40,10 +40,8 @@ export async function generateMetadata({ params }: GalleryPageProps): Promise<Me
   const description =
     album?.description?.trim() ||
     (album ? `${album.clientName} · Galeria fotografica en La Kja.` : siteSettings.shareDescription);
-  const imageUrl = resolveAbsoluteImageUrl(
-    album?.coverPhoto ? toMediaRoute(album.coverPhoto.previewKey ?? album.coverPhoto.originalKey) : siteSettings.shareImageUrl
-  );
   const canonicalUrl = `${resolveAppUrl()}/appfotos/g/${slug}`;
+  const imageUrl = album ? `${resolveAppUrl()}/api/og/albums/${encodeURIComponent(slug)}` : resolveAbsoluteImageUrl(siteSettings.shareImageUrl);
 
   return {
     title,

@@ -72,6 +72,10 @@ function buildPublicPhotoTitle(albumTitle: string, sortOrder: number) {
   return `${sortOrder + 1} - ${albumTitle}`;
 }
 
+export function buildBrandedPhotoFileName(baseName: string, extension: string) {
+  return `${baseName}_@LaKja.top${extension}`;
+}
+
 function cleanZipName(input: string) {
   return input
     .normalize("NFD")
@@ -2397,7 +2401,7 @@ export async function getOrCreateAlbumDownloadArchive(input: {
     for (const [index, photo] of input.photos.entries()) {
       const fileBuffer = await readPhotoBinary(photo.originalKey);
       const extension = path.extname(photo.filename) || ".jpg";
-      const albumBasedName = `${index + 1} - ${input.albumTitle}${extension}`;
+      const albumBasedName = buildBrandedPhotoFileName(`${index + 1} - ${input.albumTitle}`, extension);
 
       zip.file(albumBasedName, fileBuffer.body);
     }
