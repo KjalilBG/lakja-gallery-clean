@@ -157,7 +157,7 @@ export async function reserveAlbumPhotoSortOrders(albumId: string, totalFiles: n
   }
 
   return prisma.$transaction(async (tx) => {
-    await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtext(${albumId}))`;
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${albumId}))`;
 
     const album = await tx.album.findUnique({
       where: { id: albumId },
