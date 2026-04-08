@@ -6,6 +6,7 @@ import { ArrowLeft, Download, ExternalLink, Eye, FileText, Heart, Settings2, Tra
 import { AlbumPhotoWorkspace } from "@/components/admin/album-photo-workspace";
 import { AlbumPhotoUploader } from "@/components/admin/album-photo-uploader";
 import { AlbumPhotoProcessingSync } from "@/components/admin/album-photo-processing-sync";
+import { AlbumReadyEmailButton } from "@/components/admin/album-ready-email-button";
 import { AlbumRetryDerivativesButton } from "@/components/admin/album-retry-derivatives-button";
 import { AlbumSettingsFields } from "@/components/admin/album-settings-fields";
 import { AlbumBibOcrPanel } from "@/components/admin/album-bib-ocr-panel";
@@ -38,7 +39,14 @@ export default async function AlbumDetailPage({ params, searchParams }: AlbumDet
 
   return (
     <div className="space-y-6">
-      <AlbumPhotoProcessingSync albumId={album.id} enabled={album.processingPhotosCount > 0 || album.retryablePhotosCount > 0} />
+      <AlbumPhotoProcessingSync
+        albumId={album.id}
+        enabled={
+          album.processingPhotosCount > 0 ||
+          album.retryablePhotosCount > 0 ||
+          Boolean(album.previewJob && album.previewJob.emailStatus === "pending")
+        }
+      />
 
       <div className="flex flex-wrap items-center justify-between gap-3 rounded-[26px] border border-slate-200 bg-white px-5 py-4 shadow-[0_12px_30px_rgba(15,23,42,0.05)]">
         <div className="flex items-center gap-3 text-sm font-bold text-slate-500">
@@ -91,6 +99,26 @@ export default async function AlbumDetailPage({ params, searchParams }: AlbumDet
         <div className="rounded-[24px] border border-rose-200 bg-rose-50 px-5 py-4 text-sm font-bold text-rose-800">
           {String(resolvedSearchParams.ocrError)}
         </div>
+      ) : null}
+      {album.processingPhotosCount === 0 && album.retryablePhotosCount === 0 && album.previewJob ? (
+        album.previewJob.emailStatus === "sent" ? (
+          <div className="rounded-[24px] border border-lime-200 bg-lime-50 px-5 py-4 text-sm font-bold text-lime-800">
+            Correo de album listo enviado{album.previewJob.emailDeliveredAt ? ` el ${formatDate(album.previewJob.emailDeliveredAt)}` : ""}.
+          </div>
+        ) : album.previewJob.emailStatus === "failed" ? (
+          <div className="flex flex-col gap-3 rounded-[24px] border border-amber-200 bg-amber-50 px-5 py-4 text-sm font-bold text-amber-900 md:flex-row md:items-center md:justify-between">
+            <div className="space-y-1">
+              <p>El album ya quedo listo, pero el correo no se pudo enviar.</p>
+              {album.previewJob.emailError ? <p className="text-xs font-bold text-amber-800">{album.previewJob.emailError}</p> : null}
+            </div>
+            <AlbumReadyEmailButton albumId={album.id} slug={album.slug} />
+          </div>
+        ) : (
+          <div className="flex flex-col gap-3 rounded-[24px] border border-slate-200 bg-slate-50 px-5 py-4 text-sm font-bold text-slate-700 md:flex-row md:items-center md:justify-between">
+            <p>El album ya quedo listo. Si quieres, puedes disparar o reintentar el correo de aviso desde aqui.</p>
+            <AlbumReadyEmailButton albumId={album.id} slug={album.slug} label="Enviar correo de album listo" />
+          </div>
+        )
       ) : null}
 
       <section className="overflow-hidden rounded-[34px] border border-slate-200 bg-white shadow-[0_12px_30px_rgba(15,23,42,0.05)]">

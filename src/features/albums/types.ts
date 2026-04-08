@@ -83,6 +83,11 @@ export type AlbumDetail = {
     failed: number;
     remaining: number;
     batchSize: number;
+    emailStatus: "pending" | "sent" | "failed";
+    emailSent: boolean;
+    emailAttemptedAt: string | null;
+    emailDeliveredAt: string | null;
+    emailError: string | null;
     updatedAt: string;
   } | null;
   permissions: AlbumPermissionSet;

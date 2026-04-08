@@ -2,7 +2,7 @@ import { revalidatePath } from "next/cache";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 
-import { processNextAlbumPhotoPreviewBatch, retryAlbumMissingPhotoDerivatives } from "@/lib/albums";
+import { ensureAlbumProcessingCompletionEmail, processNextAlbumPhotoPreviewBatch, retryAlbumMissingPhotoDerivatives } from "@/lib/albums";
 import { ensureAdminApiRequest } from "@/lib/auth-guard";
 import { checkRateLimit } from "@/lib/rate-limit";
 import { sanitizeJsonValue } from "@/lib/sanitize";
@@ -41,6 +41,10 @@ export async function POST(
         iterations += 1;
         result = await runOrRecoverPreviewBatch(id);
       }
+    }
+
+    if (result.completed || (result.remaining ?? 0) === 0) {
+      await ensureAlbumProcessingCompletionEmail(id);
     }
 
     revalidatePath(`/appfotos/admin/albums/${id}`);

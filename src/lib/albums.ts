@@ -124,6 +124,10 @@ type PreviewJobPayload = {
   completed: number;
   failed: number;
   emailSent?: boolean;
+  emailStatus?: "pending" | "sent" | "failed";
+  emailAttemptedAt?: string;
+  emailDeliveredAt?: string;
+  emailError?: string | null;
 };
 
 function isPreviewJobPayload(value: unknown): value is PreviewJobPayload {
@@ -137,7 +141,11 @@ function isPreviewJobPayload(value: unknown): value is PreviewJobPayload {
     typeof payload.processed === "number" &&
     typeof payload.completed === "number" &&
     typeof payload.failed === "number" &&
-    (payload.emailSent === undefined || typeof payload.emailSent === "boolean")
+    (payload.emailSent === undefined || typeof payload.emailSent === "boolean") &&
+    (payload.emailStatus === undefined || payload.emailStatus === "pending" || payload.emailStatus === "sent" || payload.emailStatus === "failed") &&
+    (payload.emailAttemptedAt === undefined || typeof payload.emailAttemptedAt === "string") &&
+    (payload.emailDeliveredAt === undefined || typeof payload.emailDeliveredAt === "string") &&
+    (payload.emailError === undefined || payload.emailError === null || typeof payload.emailError === "string")
   );
 }
 
@@ -785,6 +793,11 @@ export async function getAdminAlbumById(id: string): Promise<AlbumDetail | null>
             failed: previewJobPayload.failed,
             remaining: previewJobPayload.remainingPhotoIds.length,
             batchSize: previewJobPayload.batchSize,
+            emailStatus: previewJobPayload.emailStatus ?? (previewJobPayload.emailSent ? "sent" : "pending"),
+            emailSent: previewJobPayload.emailSent ?? false,
+            emailAttemptedAt: previewJobPayload.emailAttemptedAt ?? null,
+            emailDeliveredAt: previewJobPayload.emailDeliveredAt ?? null,
+            emailError: previewJobPayload.emailError ?? null,
             updatedAt: latestPreviewJob.updatedAt.toISOString()
           }
         : null,
@@ -1497,7 +1510,11 @@ async function enqueueAlbumPhotoPreviewJobs(albumId: string, photoIds: string[],
     processed: existingPayload?.processed ?? 0,
     completed: existingPayload?.completed ?? 0,
     failed: existingPayload?.failed ?? 0,
-    emailSent: existingPayload?.emailSent ?? false
+    emailSent: existingPayload?.emailSent ?? false,
+    emailStatus: existingPayload?.emailStatus ?? "pending",
+    emailAttemptedAt: existingPayload?.emailAttemptedAt,
+    emailDeliveredAt: existingPayload?.emailDeliveredAt,
+    emailError: existingPayload?.emailError ?? null
   };
 
   const job = existingJob
@@ -1761,7 +1778,11 @@ export async function processNextAlbumPhotoPreviewBatch(albumId: string) {
     processed: payload.processed + processedInBatch,
     completed: payload.completed + completedInBatch,
     failed: payload.failed + failedInBatch,
-    emailSent: payload.emailSent ?? false
+    emailSent: payload.emailSent ?? false,
+    emailStatus: payload.emailStatus ?? (payload.emailSent ? "sent" : "pending"),
+    emailAttemptedAt: payload.emailAttemptedAt,
+    emailDeliveredAt: payload.emailDeliveredAt,
+    emailError: payload.emailError ?? null
   };
 
   const nextStatus =
@@ -1771,68 +1792,17 @@ export async function processNextAlbumPhotoPreviewBatch(albumId: string) {
         : JobStatus.COMPLETED
       : JobStatus.PENDING;
 
-  const pendingDerivativePhotosRemaining = await prisma.photo.count({
-    where: {
-      albumId,
-      OR: [
-        {
-          status: {
-            not: PhotoStatus.READY
-          }
-        },
-        {
-          previewKey: null
-        },
-        {
-          thumbKey: null
-        }
-      ]
-    }
-  });
-
-  const emailAlreadySentForAlbum = await hasAlbumProcessingCompletionEmailBeenSent(albumId);
-  const shouldSendCompletionEmail =
-    pendingDerivativePhotosRemaining === 0 &&
-    !emailAlreadySentForAlbum &&
-    !nextPayload.emailSent;
-  const persistedPayload: PreviewJobPayload = shouldSendCompletionEmail
-    ? {
-        ...nextPayload,
-        emailSent: true
-      }
-    : nextPayload;
-
   await prisma.job.update({
     where: { id: jobId },
     data: {
       status: nextStatus,
-      payload: persistedPayload,
+      payload: nextPayload,
       runAt: new Date()
     }
   });
 
-  if (shouldSendCompletionEmail) {
-    const album = await prisma.album.findUnique({
-      where: { id: albumId },
-      select: {
-        title: true
-      }
-    });
-
-    if (album) {
-      const readyPhotoCount = await prisma.photo.count({
-        where: {
-          albumId,
-          status: PhotoStatus.READY
-        }
-      });
-
-      await sendAlbumProcessingCompletedEmail({
-        albumId,
-        albumTitle: album.title,
-        photoCount: readyPhotoCount
-      });
-    }
+  if (nextPayload.remainingPhotoIds.length === 0) {
+    await ensureAlbumProcessingCompletionEmail(albumId);
   }
 
   return {
@@ -2452,21 +2422,64 @@ export async function getOrCreateAlbumDownloadArchive(input: {
   };
 }
 
+async function hasAlbumProcessingCompletionEmailBeenSent(albumId: string) {
+  const rows = await prisma.$queryRaw<Array<{ exists: boolean }>>`
+    SELECT EXISTS(
+      SELECT 1
+      FROM "Job"
+      WHERE "albumId" = ${albumId}
+        AND "type"::text = ${JobType.GENERATE_PREVIEW}
+        AND COALESCE("payload"->>'emailSent', 'false') = 'true'
+    ) AS "exists"
+  `;
+
+  return rows[0]?.exists ?? false;
+}
+
+async function getPendingAlbumDerivativeCount(albumId: string) {
+  return prisma.photo.count({
+    where: {
+      albumId,
+      OR: [
+        {
+          status: {
+            not: PhotoStatus.READY
+          }
+        },
+        {
+          previewKey: null
+        },
+        {
+          thumbKey: null
+        }
+      ]
+    }
+  });
+}
+
+type AlbumProcessingEmailAttemptResult =
+  | { ok: true; deliveredAt: string }
+  | { ok: false; error: string };
+
 async function sendAlbumProcessingCompletedEmail(input: {
   albumId: string;
   albumTitle: string;
   photoCount: number;
-}) {
+}): Promise<AlbumProcessingEmailAttemptResult> {
   const apiKey = process.env.RESEND_API_KEY?.trim();
 
   if (!apiKey) {
-    return;
+    return { ok: false, error: "Falta configurar RESEND_API_KEY." };
   }
 
   const to = process.env.ALBUM_PROCESSING_NOTIFY_EMAIL?.trim() || "kjalilbeyruti@gmail.com";
-  const from = process.env.RESEND_FROM_EMAIL?.trim() || "onboarding@resend.dev";
+  const from = process.env.RESEND_FROM_EMAIL?.trim();
 
-  await fetch("https://api.resend.com/emails", {
+  if (!from) {
+    return { ok: false, error: "Falta configurar RESEND_FROM_EMAIL." };
+  }
+
+  const response = await fetch("https://api.resend.com/emails", {
     method: "POST",
     headers: {
       Authorization: `Bearer ${apiKey}`,
@@ -2485,21 +2498,109 @@ async function sendAlbumProcessingCompletedEmail(input: {
         </div>
       `
     })
-  }).catch(() => undefined);
+  });
+
+  if (!response.ok) {
+    const errorBody = await response.text().catch(() => "");
+    return {
+      ok: false,
+      error: errorBody || `Resend devolvio ${response.status}.`
+    };
+  }
+
+  return {
+    ok: true,
+    deliveredAt: new Date().toISOString()
+  };
 }
 
-async function hasAlbumProcessingCompletionEmailBeenSent(albumId: string) {
-  const rows = await prisma.$queryRaw<Array<{ exists: boolean }>>`
-    SELECT EXISTS(
-      SELECT 1
-      FROM "Job"
-      WHERE "albumId" = ${albumId}
-        AND "type"::text = ${JobType.GENERATE_PREVIEW}
-        AND COALESCE("payload"->>'emailSent', 'false') = 'true'
-    ) AS "exists"
-  `;
+export async function ensureAlbumProcessingCompletionEmail(albumId: string) {
+  const latestPreviewJob = await prisma.job.findFirst({
+    where: {
+      albumId,
+      type: JobType.GENERATE_PREVIEW
+    },
+    orderBy: { updatedAt: "desc" },
+    select: {
+      id: true,
+      payload: true
+    }
+  });
 
-  return rows[0]?.exists ?? false;
+  if (!latestPreviewJob) {
+    return { ok: false as const, reason: "job-missing" };
+  }
+
+  const payload = normalizePreviewJobPayload(latestPreviewJob.payload);
+
+  if (!payload) {
+    return { ok: false as const, reason: "payload-invalid" };
+  }
+
+  const pendingDerivativePhotosRemaining = await getPendingAlbumDerivativeCount(albumId);
+
+  if (pendingDerivativePhotosRemaining > 0) {
+    return { ok: false as const, reason: "album-not-ready" };
+  }
+
+  const emailAlreadySentForAlbum = await hasAlbumProcessingCompletionEmailBeenSent(albumId);
+  if (payload.emailSent || emailAlreadySentForAlbum) {
+    return { ok: true as const, reason: "already-sent" };
+  }
+
+  const album = await prisma.album.findUnique({
+    where: { id: albumId },
+    select: {
+      title: true
+    }
+  });
+
+  if (!album) {
+    return { ok: false as const, reason: "album-missing" };
+  }
+
+  const readyPhotoCount = await prisma.photo.count({
+    where: {
+      albumId,
+      status: PhotoStatus.READY
+    }
+  });
+
+  const attemptedAt = new Date().toISOString();
+  const result = await sendAlbumProcessingCompletedEmail({
+    albumId,
+    albumTitle: album.title,
+    photoCount: readyPhotoCount
+  });
+
+  const nextPayload: PreviewJobPayload = result.ok
+    ? {
+        ...payload,
+        emailSent: true,
+        emailStatus: "sent",
+        emailAttemptedAt: attemptedAt,
+        emailDeliveredAt: result.deliveredAt,
+        emailError: null
+      }
+    : {
+        ...payload,
+        emailSent: false,
+        emailStatus: "failed",
+        emailAttemptedAt: attemptedAt,
+        emailDeliveredAt: payload.emailDeliveredAt,
+        emailError: result.error
+      };
+
+  await prisma.job.update({
+    where: { id: latestPreviewJob.id },
+    data: {
+      payload: nextPayload
+    }
+  });
+
+  return result.ok
+    ? { ok: true as const, reason: "sent", deliveredAt: result.deliveredAt }
+    : { ok: false as const, reason: "send-failed", error: result.error };
 }
 
 export async function deleteAlbum(albumId: string) {
