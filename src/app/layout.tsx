@@ -17,9 +17,9 @@ export async function generateMetadata(): Promise<Metadata> {
   return {
     metadataBase: new URL(resolveAppUrl()),
     icons: {
-      icon: [{ url: "/favicon.svg", type: "image/svg+xml" }],
-      shortcut: ["/favicon.svg"],
-      apple: ["/favicon.svg"]
+      icon: [{ url: "/branding/lakja-logo.svg", type: "image/svg+xml" }],
+      shortcut: ["/branding/lakja-logo.svg"],
+      apple: ["/branding/lakja-logo.svg"]
     },
     title: settings.shareTitle,
     description: settings.shareDescription,

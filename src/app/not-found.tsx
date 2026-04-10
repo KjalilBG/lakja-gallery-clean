@@ -15,12 +15,29 @@ const VARIANTS = [
   "No existe esta pagina, pero si muchas galerias lindas."
 ];
 
+const IMAGE_VARIANTS = [
+  "https://images.unsplash.com/photo-1511285560929-80b456fea0bc?auto=format&fit=crop&w=1400&q=80",
+  "https://images.unsplash.com/photo-1522673607200-164d1b6ce486?auto=format&fit=crop&w=1400&q=80",
+  "https://images.unsplash.com/photo-1520854221256-17451cc331bf?auto=format&fit=crop&w=1400&q=80",
+  "https://images.unsplash.com/photo-1511895426328-dc8714191300?auto=format&fit=crop&w=1400&q=80",
+  "https://images.unsplash.com/photo-1516589178581-6cd7833ae3b2?auto=format&fit=crop&w=1400&q=80",
+  "https://images.unsplash.com/photo-1487412720507-e7ab37603c6f?auto=format&fit=crop&w=1400&q=80",
+  "https://images.unsplash.com/photo-1474552226712-ac0f0961a954?auto=format&fit=crop&w=1400&q=80",
+  "https://images.unsplash.com/photo-1453738773917-9c3eff1db985?auto=format&fit=crop&w=1400&q=80",
+  "https://images.unsplash.com/photo-1469334031218-e382a71b716b?auto=format&fit=crop&w=1400&q=80",
+  "https://images.unsplash.com/photo-1519741497674-611481863552?auto=format&fit=crop&w=1400&q=80"
+];
+
 export default function NotFound() {
   const message = VARIANTS[Math.floor(Math.random() * VARIANTS.length)] ?? VARIANTS[0];
+  const image = IMAGE_VARIANTS[Math.floor(Math.random() * IMAGE_VARIANTS.length)] ?? IMAGE_VARIANTS[0];
 
   return (
     <div className="mx-auto flex min-h-[65vh] w-full max-w-2xl items-center justify-center px-4 py-12">
       <div className="w-full rounded-[28px] border border-slate-200 bg-white px-6 py-10 text-center shadow-[0_18px_45px_rgba(15,23,42,0.08)]">
+        <div className="mx-auto mb-6 overflow-hidden rounded-[20px] border border-slate-200">
+          <img src={image} alt="Preview aleatorio LaKja" className="h-52 w-full object-cover md:h-64" />
+        </div>
         <p className="text-[11px] font-extrabold uppercase tracking-[0.26em] text-slate-400">404 Not Found</p>
         <h1 className="mt-3 text-4xl font-black tracking-tight text-slate-950 md:text-5xl">Ups</h1>
         <p className="mt-4 text-base leading-7 text-slate-600">{message}</p>
