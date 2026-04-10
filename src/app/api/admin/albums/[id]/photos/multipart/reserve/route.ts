@@ -10,7 +10,7 @@ export const maxDuration = 30;
 
 const reserveSchema = z.object({
   albumId: z.string().cuid(),
-  totalFiles: z.number().int().min(1).max(500)
+  totalFiles: z.number().int().min(1).max(2000)
 });
 
 export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
