@@ -736,6 +736,13 @@ export async function getAdminAlbumById(id: string): Promise<AlbumDetail | null>
           createdAt: true
         }
       },
+      favorites: {
+        orderBy: { createdAt: "desc" },
+        select: {
+          photoId: true,
+          createdAt: true
+        }
+      },
       jobs: {
         where: { type: { in: [JobType.OCR_BIB, JobType.GENERATE_PREVIEW] } },
         orderBy: { updatedAt: "desc" },
@@ -811,7 +818,13 @@ export async function getAdminAlbumById(id: string): Promise<AlbumDetail | null>
     })
     .slice(0, 8);
 
-  const favoriteCountByPhotoId = album.favoriteSelections.reduce((map, selection) => {
+  const favoriteCountByPhotoId = album.favorites.reduce((map, favorite) => {
+    const current = map.get(favorite.photoId) ?? 0;
+    map.set(favorite.photoId, current + 1);
+    return map;
+  }, new Map<string, number>());
+
+  const submittedFavoriteCountByPhotoId = album.favoriteSelections.reduce((map, selection) => {
     for (const item of selection.items) {
       const current = map.get(item.photo.id) ?? 0;
       map.set(item.photo.id, current + 1);
@@ -824,9 +837,10 @@ export async function getAdminAlbumById(id: string): Promise<AlbumDetail | null>
     .map((photo) => {
       const aggregatedDownloadStats = downloadStatsByPhotoId.get(photo.id);
       const favoriteCount = favoriteCountByPhotoId.get(photo.id) ?? 0;
+      const submittedFavoriteCount = submittedFavoriteCountByPhotoId.get(photo.id) ?? 0;
       const downloadCount = aggregatedDownloadStats?.downloadCount ?? 0;
 
-      if (downloadCount === 0 && favoriteCount === 0) {
+      if (downloadCount === 0 && favoriteCount === 0 && submittedFavoriteCount === 0) {
         return null;
       }
 
@@ -836,6 +850,7 @@ export async function getAdminAlbumById(id: string): Promise<AlbumDetail | null>
         thumbUrl: photo.thumbKey ? toMediaRoute(photo.thumbKey) : buildPhotoUrl(photo),
         downloadCount,
         favoriteCount,
+        submittedFavoriteCount,
         lastDownloadedAt: aggregatedDownloadStats?.lastDownloadedAt.toISOString() ?? null,
         sortOrder: photo.sortOrder
       };
@@ -848,6 +863,10 @@ export async function getAdminAlbumById(id: string): Promise<AlbumDetail | null>
 
       if (right.favoriteCount !== left.favoriteCount) {
         return right.favoriteCount - left.favoriteCount;
+      }
+
+      if (right.submittedFavoriteCount !== left.submittedFavoriteCount) {
+        return right.submittedFavoriteCount - left.submittedFavoriteCount;
       }
 
       if (left.lastDownloadedAt && right.lastDownloadedAt && left.lastDownloadedAt !== right.lastDownloadedAt) {

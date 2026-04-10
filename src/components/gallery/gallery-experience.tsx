@@ -62,6 +62,10 @@ export function GalleryExperience({
   const [showOnlyFavorites, setShowOnlyFavorites] = useState(false);
   const [downloadIntent, setDownloadIntent] = useState<DownloadIntent | null>(null);
   const [isClosingDownloadPopup, setIsClosingDownloadPopup] = useState(false);
+  const [showFullDownloadPrompt, setShowFullDownloadPrompt] = useState(false);
+  const [fullDownloadPassword, setFullDownloadPassword] = useState("");
+  const [fullDownloadError, setFullDownloadError] = useState("");
+  const [isPreparingFullDownload, setIsPreparingFullDownload] = useState(false);
   const [showSendFavorites, setShowSendFavorites] = useState(false);
   const [bibQuery, setBibQuery] = useState("");
   const [senderName, setSenderName] = useState("");
@@ -363,37 +367,13 @@ export function GalleryExperience({
     const sessionId = getSessionId();
 
     if (intent.type === "all") {
-      const downloadPassword = fullDownloadPasswordRequired
-        ? window.prompt("Escribe la contrasena de descarga completa para bajar este ZIP.")?.trim() ?? ""
-        : "";
-
-      if (fullDownloadPasswordRequired && !downloadPassword) {
+      if (fullDownloadPasswordRequired) {
+        setFullDownloadError("");
+        setShowFullDownloadPrompt(true);
         return;
       }
 
-      try {
-        const response = await fetch(`/api/albums/${slug}/download`, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json"
-          },
-          body: JSON.stringify({
-            type: "all",
-            sessionId,
-            downloadPassword
-          })
-        });
-
-        const data = (await response.json()) as { signedUrl?: string; error?: string };
-
-        if (!response.ok || !data.signedUrl) {
-          throw new Error(data.error || "No se pudo preparar la descarga completa.");
-        }
-
-        window.location.href = data.signedUrl;
-      } catch (error) {
-        window.alert(error instanceof Error ? error.message : "No se pudo preparar la descarga completa.");
-      }
+      await submitFullAlbumDownload("");
       return;
     }
 
@@ -425,6 +405,44 @@ export function GalleryExperience({
     if (downloadPopupEnabled) {
       setIsClosingDownloadPopup(false);
       setDownloadIntent(intent);
+    }
+  }
+
+  async function submitFullAlbumDownload(downloadPassword: string) {
+    const sessionId = getSessionId();
+    setIsPreparingFullDownload(true);
+    setFullDownloadError("");
+
+    try {
+      const response = await fetch(`/api/albums/${slug}/download`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          type: "all",
+          sessionId,
+          downloadPassword
+        })
+      });
+
+      const data = (await response.json()) as { signedUrl?: string; error?: string };
+
+      if (!response.ok || !data.signedUrl) {
+        throw new Error(data.error || "No se pudo preparar la descarga completa.");
+      }
+
+      setShowFullDownloadPrompt(false);
+      setFullDownloadPassword("");
+      if (downloadPopupEnabled) {
+        setIsClosingDownloadPopup(false);
+        setDownloadIntent({ type: "all" });
+      }
+      window.open(data.signedUrl, "_blank", "noopener,noreferrer");
+    } catch (error) {
+      setFullDownloadError(error instanceof Error ? error.message : "No se pudo preparar la descarga completa.");
+    } finally {
+      setIsPreparingFullDownload(false);
     }
   }
 
@@ -679,6 +697,90 @@ export function GalleryExperience({
                   </button>
                 </div>
               </div>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {showFullDownloadPrompt ? (
+        <div className="fixed inset-0 z-[62] bg-slate-950/60">
+          <div className="flex min-h-screen items-center justify-center px-4">
+            <div className="w-full max-w-md rounded-[30px] border border-white/20 bg-white p-6 shadow-[0_24px_70px_rgba(15,23,42,0.25)] sm:p-8">
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <p className="text-[11px] font-extrabold uppercase tracking-[0.24em] text-slate-400">Descarga completa</p>
+                  <h3 className="mt-2 text-3xl font-black tracking-tight text-slate-900">Protegida con contrasena</h3>
+                  <p className="mt-3 text-sm leading-7 text-slate-500">
+                    Solo la duena del album tiene esta clave. Si la escribes bien, la descarga arrancara y te dejaremos aqui mismo el popup con branding.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (isPreparingFullDownload) return;
+                    setShowFullDownloadPrompt(false);
+                    setFullDownloadError("");
+                    setFullDownloadPassword("");
+                  }}
+                  className="rounded-full border border-slate-200 p-2 text-slate-400 transition hover:text-slate-700"
+                  aria-label="Cerrar descarga completa"
+                >
+                  <X className="size-5" />
+                </button>
+              </div>
+
+              <div className="mt-6 grid gap-4">
+                <label className="space-y-2">
+                  <span className="text-sm font-bold text-slate-500">Contrasena del ZIP completo</span>
+                  <input
+                    value={fullDownloadPassword}
+                    onChange={(event) => setFullDownloadPassword(event.target.value)}
+                    type="password"
+                    className="w-full rounded-[18px] border border-slate-200 bg-slate-50 px-4 py-3 outline-none transition focus:border-lime-400 focus:bg-white"
+                    placeholder="Escribe la contrasena"
+                  />
+                </label>
+              </div>
+
+              {fullDownloadError ? (
+                <div className="mt-4 rounded-[18px] border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-bold text-rose-700">
+                  <p>{fullDownloadError}</p>
+                  <p className="mt-1 font-medium text-rose-600">
+                    Si no la tienes, contacta por WhatsApp a la duena del album.
+                  </p>
+                </div>
+              ) : null}
+
+              <div className="mt-6 grid gap-3 sm:grid-cols-2">
+                <Button
+                  variant="secondary"
+                  onClick={() => {
+                    setShowFullDownloadPrompt(false);
+                    setFullDownloadError("");
+                    setFullDownloadPassword("");
+                  }}
+                  disabled={isPreparingFullDownload}
+                >
+                  Cerrar
+                </Button>
+                <Button
+                  onClick={() => void submitFullAlbumDownload(fullDownloadPassword.trim())}
+                  disabled={isPreparingFullDownload || fullDownloadPassword.trim().length === 0}
+                >
+                  {isPreparingFullDownload ? <LoaderCircle className="mr-2 size-4 animate-spin" /> : <Download className="mr-2 size-4" />}
+                  Iniciar descarga
+                </Button>
+              </div>
+
+              <a
+                href={`https://wa.me/${whatsappNumber}`}
+                target="_blank"
+                rel="noreferrer"
+                className="mt-4 inline-flex w-full items-center justify-center rounded-full border border-lime-200 px-4 py-3 text-[11px] font-extrabold uppercase tracking-[0.12em] text-lime-700 transition hover:bg-lime-50"
+              >
+                <MessageCircle className="mr-2 size-4" />
+                Contactar por WhatsApp
+              </a>
             </div>
           </div>
         </div>

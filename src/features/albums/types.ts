@@ -108,6 +108,7 @@ export type AlbumDetail = {
     thumbUrl: string;
     downloadCount: number;
     favoriteCount: number;
+    submittedFavoriteCount: number;
     lastDownloadedAt: string | null;
   }[];
 };

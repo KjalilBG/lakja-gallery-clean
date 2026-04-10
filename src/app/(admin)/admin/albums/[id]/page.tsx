@@ -405,16 +405,19 @@ export default async function AlbumDetailPage({ params, searchParams }: AlbumDet
                 <p className="font-black uppercase tracking-[0.18em] text-slate-900">Lectura de entregas</p>
               </div>
               <p className="mt-4 text-sm leading-7 text-slate-500">
-                Aqui ves todas las fotos que ya descargaron o que aparecieron en listas de favoritas.
+                Aqui ves las fotos con mas senal real: descargadas, marcadas como favoritas o ya incluidas en listas enviadas.
               </p>
-              <div className="mt-4 max-h-[420px] space-y-3 overflow-y-auto pr-1">
-                {album.photoDeliveryInsights.map((photo) => (
+              <p className="mt-3 text-[11px] font-extrabold uppercase tracking-[0.16em] text-slate-400">
+                {album.photoDeliveryInsights.length} foto(s) con actividad
+              </p>
+              <div className="mt-4 space-y-3">
+                {album.photoDeliveryInsights.slice(0, 12).map((photo) => (
                   <div key={photo.id} className="flex items-center gap-3 rounded-[18px] border border-slate-200 bg-slate-50 px-3 py-3">
                     <img src={photo.thumbUrl} alt={photo.title} className="h-12 w-12 rounded-[12px] object-cover" />
                     <div className="min-w-0 flex-1">
                       <p className="truncate text-sm font-bold text-slate-900">{photo.title}</p>
                       <p className="mt-1 text-xs font-medium text-slate-500">
-                        {photo.downloadCount} descarga(s) · {photo.favoriteCount} favorita(s)
+                        {photo.downloadCount} descarga(s) · {photo.favoriteCount} favorita(s) marcadas
                       </p>
                       <div className="mt-2 flex flex-wrap gap-2">
                         {photo.downloadCount > 0 ? (
@@ -427,6 +430,11 @@ export default async function AlbumDetailPage({ params, searchParams }: AlbumDet
                             Favorita
                           </span>
                         ) : null}
+                        {photo.submittedFavoriteCount > 0 ? (
+                          <span className="rounded-full bg-fuchsia-100 px-2.5 py-1 text-[10px] font-extrabold uppercase tracking-[0.14em] text-fuchsia-700">
+                            Enviada {photo.submittedFavoriteCount}
+                          </span>
+                        ) : null}
                       </div>
                       {photo.lastDownloadedAt ? (
                         <p className="mt-2 text-[11px] font-bold uppercase tracking-[0.12em] text-slate-400">
@@ -437,6 +445,26 @@ export default async function AlbumDetailPage({ params, searchParams }: AlbumDet
                   </div>
                 ))}
               </div>
+              {album.photoDeliveryInsights.length > 12 ? (
+                <details className="mt-3 rounded-[20px] border border-slate-200 bg-slate-50 px-4 py-3">
+                  <summary className="cursor-pointer text-[11px] font-extrabold uppercase tracking-[0.14em] text-slate-600">
+                    Ver {album.photoDeliveryInsights.length - 12} mas
+                  </summary>
+                  <div className="mt-3 max-h-[320px] space-y-3 overflow-y-auto pr-1">
+                    {album.photoDeliveryInsights.slice(12).map((photo) => (
+                      <div key={photo.id} className="flex items-center gap-3 rounded-[18px] border border-slate-200 bg-white px-3 py-3">
+                        <img src={photo.thumbUrl} alt={photo.title} className="h-11 w-11 rounded-[12px] object-cover" />
+                        <div className="min-w-0 flex-1">
+                          <p className="truncate text-sm font-bold text-slate-900">{photo.title}</p>
+                          <p className="mt-1 text-xs font-medium text-slate-500">
+                            {photo.downloadCount} descarga(s) · {photo.favoriteCount} favorita(s) marcadas
+                          </p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </details>
+              ) : null}
             </div>
           ) : null}
 
