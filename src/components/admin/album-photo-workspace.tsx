@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { CheckCircle2, FileSearch, GripVertical, LoaderCircle, Search, SquareCheckBig, Star, Trash2 } from "lucide-react";
+import { ArrowDownAZ, CalendarClock, CheckCircle2, FileSearch, GripVertical, LoaderCircle, Search, SquareCheckBig, Star, Trash2 } from "lucide-react";
 
 import type { GalleryPhoto } from "@/features/albums/types";
 import { cn } from "@/lib/utils";
@@ -16,6 +16,7 @@ type AlbumPhotoWorkspaceProps = {
 
 type ViewMode = "comfortable" | "compact";
 type BibFilter = "all" | "pending" | "detected" | "manual";
+const fileNameCollator = new Intl.Collator("es-MX", { numeric: true, sensitivity: "base" });
 
 function getProcessingStatusMeta(photo: GalleryPhoto) {
   if (photo.processingStatus === "failed") {
@@ -154,6 +155,28 @@ export function AlbumPhotoWorkspace({ albumId, slug, photos, bibRecognitionEnabl
 
   async function handleReorder(orderedPhotoIds: string[]) {
     await callMutation(`/api/admin/albums/${albumId}/photos/reorder`, { slug, orderedPhotoIds }, "saved=1");
+  }
+
+  async function handleAutoSort(mode: "filename" | "capturedAt") {
+    const orderedPhotos = [...photos].sort((left, right) => {
+      if (mode === "capturedAt") {
+        const leftCapturedAt = left.capturedAt ? new Date(left.capturedAt).getTime() : Number.POSITIVE_INFINITY;
+        const rightCapturedAt = right.capturedAt ? new Date(right.capturedAt).getTime() : Number.POSITIVE_INFINITY;
+
+        if (leftCapturedAt !== rightCapturedAt) {
+          return leftCapturedAt - rightCapturedAt;
+        }
+      }
+
+      const fileNameComparison = fileNameCollator.compare(left.title, right.title);
+      if (fileNameComparison !== 0) {
+        return fileNameComparison;
+      }
+
+      return (left.sortOrder ?? 0) - (right.sortOrder ?? 0);
+    });
+
+    await handleReorder(orderedPhotos.map((photo) => photo.id));
   }
 
   async function handleRetryPhotoOcr(photoId: string) {
@@ -345,6 +368,24 @@ export function AlbumPhotoWorkspace({ albumId, slug, photos, bibRecognitionEnabl
         </div>
 
         <div className="flex flex-wrap items-center gap-3">
+          <button
+            type="button"
+            disabled={isMutating || photos.length < 2}
+            onClick={() => void handleAutoSort("filename")}
+            className="inline-flex items-center rounded-full border border-slate-200 bg-white px-4 py-3 text-xs font-extrabold uppercase tracking-[0.18em] text-slate-700 transition hover:border-lime-300 hover:text-slate-950 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            <ArrowDownAZ className="mr-2 size-4" />
+            Ordenar por nombre
+          </button>
+          <button
+            type="button"
+            disabled={isMutating || photos.length < 2}
+            onClick={() => void handleAutoSort("capturedAt")}
+            className="inline-flex items-center rounded-full border border-slate-200 bg-white px-4 py-3 text-xs font-extrabold uppercase tracking-[0.18em] text-slate-700 transition hover:border-lime-300 hover:text-slate-950 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            <CalendarClock className="mr-2 size-4" />
+            Ordenar por fecha
+          </button>
           <div className="inline-flex rounded-full border border-slate-200 bg-white p-1">
             <button
               type="button"

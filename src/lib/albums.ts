@@ -914,6 +914,7 @@ export async function getAdminAlbumById(id: string): Promise<AlbumDetail | null>
       url: buildPhotoUrl(photo),
       thumbUrl: photo.thumbKey ? toMediaRoute(photo.thumbKey) : buildPhotoUrl(photo),
       title: photo.filename,
+      capturedAt: photo.capturedAt ? photo.capturedAt.toISOString() : null,
       aspect: detectAspect(photo.filename),
       isCover: album.coverPhotoId === photo.id,
       sortOrder: photo.sortOrder,

@@ -28,6 +28,7 @@ export type GalleryPhoto = {
   url: string;
   thumbUrl?: string;
   title: string;
+  capturedAt?: string | null;
   aspect: "portrait" | "landscape" | "square";
   isFavorite?: boolean;
   isCover?: boolean;
