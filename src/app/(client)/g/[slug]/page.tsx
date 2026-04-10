@@ -145,6 +145,7 @@ export default async function GalleryPage({ params, searchParams }: GalleryPageP
           allowSingleDownload={siteSettings.downloadsEnabled && (album?.allowSingleDownload ?? true)}
           allowFavoritesDownload={siteSettings.downloadsEnabled && (album?.allowFavoritesDownload ?? true)}
           allowFullDownload={siteSettings.downloadsEnabled && (album?.allowFullDownload ?? true)}
+          fullDownloadPasswordRequired={Boolean(album?.fullDownloadPasswordHash)}
           favoritesEnabled={siteSettings.favoritesEnabled}
           downloadsEnabled={siteSettings.downloadsEnabled}
           downloadPopupEnabled={siteSettings.downloadPopupEnabled}

@@ -55,6 +55,7 @@ type QueuedPhoto = UploadQueueItem & {
 export function NewAlbumForm() {
   const router = useRouter();
   const [visibility, setVisibility] = useState<AlbumVisibility>(AlbumVisibility.PUBLIC_LINK);
+  const [allowFullDownload, setAllowFullDownload] = useState(false);
   const [queuedFiles, setQueuedFiles] = useState<QueuedPhoto[]>([]);
   const [isDragging, setIsDragging] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -131,6 +132,7 @@ export function NewAlbumForm() {
       coverFocusX: 50,
       coverFocusY: 50,
       password: String(formData.get("password") ?? ""),
+      fullDownloadPassword: String(formData.get("fullDownloadPassword") ?? ""),
       allowSingleDownload: formData.get("allowSingleDownload") === "on",
       allowFavoritesDownload: formData.get("allowFavoritesDownload") === "on",
       allowFullDownload: formData.get("allowFullDownload") === "on"
@@ -271,6 +273,29 @@ export function NewAlbumForm() {
               />
             </label>
           </div>
+
+          {allowFullDownload ? (
+            <div className="rounded-[24px] border border-slate-200 bg-slate-50 p-5">
+              <div className="grid gap-4 md:grid-cols-[220px_1fr] md:items-start">
+                <div>
+                  <p className="text-sm font-bold text-slate-900">Contrasena de descarga completa</p>
+                  <p className="mt-2 text-sm leading-6 text-slate-500">
+                    Es opcional y es independiente de la contrasena del album. Solo se pedira al bajar el ZIP completo.
+                  </p>
+                </div>
+                <label className="space-y-2">
+                  <span className="text-sm font-bold text-slate-500">Nueva contrasena</span>
+                  <input
+                    name="fullDownloadPassword"
+                    type="password"
+                    minLength={4}
+                    className="w-full rounded-[20px] border border-slate-200 bg-white px-4 py-3 outline-none transition focus:border-lime-400"
+                    placeholder="Opcional, minimo 4 caracteres"
+                  />
+                </label>
+              </div>
+            </div>
+          ) : null}
 
           <div className="grid gap-5 md:grid-cols-2">
             <label className="space-y-2">
@@ -510,6 +535,11 @@ export function NewAlbumForm() {
                     name={option.name}
                     type="checkbox"
                     defaultChecked={index < 2}
+                    onChange={(event) => {
+                      if (option.name === "allowFullDownload") {
+                        setAllowFullDownload(event.target.checked);
+                      }
+                    }}
                     className="mt-1 h-5 w-5 rounded border-slate-300 text-lime-500 focus:ring-lime-400"
                     form="album-form"
                   />

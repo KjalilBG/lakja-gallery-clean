@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { ChevronLeft, ChevronRight, Download, Facebook, Heart, Images, Instagram, LoaderCircle, MessageCircle, Search, Send, X } from "lucide-react";
 
 import type { GalleryPhoto } from "@/features/albums/types";
@@ -22,6 +23,7 @@ type GalleryExperienceProps = {
   allowSingleDownload?: boolean;
   allowFavoritesDownload?: boolean;
   allowFullDownload?: boolean;
+  fullDownloadPasswordRequired?: boolean;
   favoritesEnabled: boolean;
   downloadsEnabled: boolean;
   downloadPopupEnabled: boolean;
@@ -41,6 +43,7 @@ export function GalleryExperience({
   allowSingleDownload = false,
   allowFavoritesDownload = false,
   allowFullDownload = false,
+  fullDownloadPasswordRequired = false,
   favoritesEnabled,
   downloadsEnabled,
   downloadPopupEnabled,
@@ -51,6 +54,9 @@ export function GalleryExperience({
   downloadPopupTitle,
   downloadPopupBody
 }: GalleryExperienceProps) {
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
   const [activeIndex, setActiveIndex] = useState<number | null>(null);
   const [favoriteIds, setFavoriteIds] = useState<string[]>([]);
   const [showOnlyFavorites, setShowOnlyFavorites] = useState(false);
@@ -63,6 +69,9 @@ export function GalleryExperience({
   const [senderMessage, setSenderMessage] = useState("");
   const [isSendingFavorites, setIsSendingFavorites] = useState(false);
   const [sendFavoritesError, setSendFavoritesError] = useState("");
+  const [origin, setOrigin] = useState("");
+  const touchStartX = useRef<number | null>(null);
+  const touchStartY = useRef<number | null>(null);
 
   useEffect(() => {
     try {
@@ -97,6 +106,10 @@ export function GalleryExperience({
     }
   }, [senderStorageKey]);
 
+  useEffect(() => {
+    setOrigin(window.location.origin);
+  }, []);
+
   const photosWithFavorites = useMemo(
     () =>
       photos.map((photo) => ({
@@ -123,12 +136,32 @@ export function GalleryExperience({
 
   const activePhoto = activeIndex === null ? null : visiblePhotos[activeIndex];
   const activePosition = activeIndex === null ? 0 : activeIndex + 1;
+  const activePhotoUrl = activePhoto && origin ? `${origin}${pathname}?photo=${encodeURIComponent(activePhoto.id)}` : null;
 
   useEffect(() => {
     if (activeIndex === null) return;
     if (activeIndex <= visiblePhotos.length - 1) return;
     setActiveIndex(visiblePhotos.length > 0 ? visiblePhotos.length - 1 : null);
   }, [activeIndex, visiblePhotos.length]);
+
+  useEffect(() => {
+    const photoId = searchParams.get("photo");
+
+    if (!photoId) {
+      if (activeIndex !== null) {
+        setActiveIndex(null);
+      }
+      return;
+    }
+
+    const nextIndex = visiblePhotos.findIndex((photo) => photo.id === photoId);
+    if (nextIndex >= 0 && nextIndex !== activeIndex) {
+      setActiveIndex(nextIndex);
+    }
+    if (nextIndex < 0 && activeIndex !== null) {
+      setActiveIndex(null);
+    }
+  }, [activeIndex, searchParams, visiblePhotos]);
 
   useEffect(() => {
     if (activeIndex === null) return;
@@ -164,16 +197,57 @@ export function GalleryExperience({
 
   function goPrevious() {
     setActiveIndex((current) => {
-      if (current === null) return 0;
-      return current === 0 ? visiblePhotos.length - 1 : current - 1;
+      const nextIndex = current === null ? 0 : current === 0 ? visiblePhotos.length - 1 : current - 1;
+      const nextPhoto = visiblePhotos[nextIndex];
+      if (nextPhoto) {
+        updatePhotoParam(nextPhoto.id);
+      }
+      return nextIndex;
     });
   }
 
   function goNext() {
     setActiveIndex((current) => {
-      if (current === null) return 0;
-      return current === visiblePhotos.length - 1 ? 0 : current + 1;
+      const nextIndex = current === null ? 0 : current === visiblePhotos.length - 1 ? 0 : current + 1;
+      const nextPhoto = visiblePhotos[nextIndex];
+      if (nextPhoto) {
+        updatePhotoParam(nextPhoto.id);
+      }
+      return nextIndex;
     });
+  }
+
+  function handleViewerTouchStart(event: React.TouchEvent<HTMLDivElement>) {
+    const touch = event.touches[0];
+    touchStartX.current = touch.clientX;
+    touchStartY.current = touch.clientY;
+  }
+
+  function handleViewerTouchEnd(event: React.TouchEvent<HTMLDivElement>) {
+    const startX = touchStartX.current;
+    const startY = touchStartY.current;
+    const touch = event.changedTouches[0];
+
+    touchStartX.current = null;
+    touchStartY.current = null;
+
+    if (startX === null || startY === null) {
+      return;
+    }
+
+    const deltaX = touch.clientX - startX;
+    const deltaY = touch.clientY - startY;
+
+    if (Math.abs(deltaX) < 56 || Math.abs(deltaX) <= Math.abs(deltaY) * 1.15) {
+      return;
+    }
+
+    if (deltaX < 0) {
+      goNext();
+      return;
+    }
+
+    goPrevious();
   }
 
   function toggleFavorite(photoId: string) {
@@ -281,7 +355,7 @@ export function GalleryExperience({
     }
   }
 
-  function startDownload(intent: DownloadIntent) {
+  async function startDownload(intent: DownloadIntent) {
     if (!downloadsEnabled) {
       return;
     }
@@ -289,7 +363,38 @@ export function GalleryExperience({
     const sessionId = getSessionId();
 
     if (intent.type === "all") {
-      window.location.href = `/api/albums/${slug}/download?type=all&sessionId=${encodeURIComponent(sessionId)}`;
+      const downloadPassword = fullDownloadPasswordRequired
+        ? window.prompt("Escribe la contrasena de descarga completa para bajar este ZIP.")?.trim() ?? ""
+        : "";
+
+      if (fullDownloadPasswordRequired && !downloadPassword) {
+        return;
+      }
+
+      try {
+        const response = await fetch(`/api/albums/${slug}/download`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify({
+            type: "all",
+            sessionId,
+            downloadPassword
+          })
+        });
+
+        const data = (await response.json()) as { signedUrl?: string; error?: string };
+
+        if (!response.ok || !data.signedUrl) {
+          throw new Error(data.error || "No se pudo preparar la descarga completa.");
+        }
+
+        window.location.href = data.signedUrl;
+      } catch (error) {
+        window.alert(error instanceof Error ? error.message : "No se pudo preparar la descarga completa.");
+      }
+      return;
     }
 
     if (intent.type === "favorites") {
@@ -337,19 +442,54 @@ export function GalleryExperience({
         isFavorite: favoriteIds.includes(activePhoto.id)
       }
     : null;
+  const canShowFavoritesFlow = favoritesEnabled;
+  const canShowFavoritesDownload = favoritesEnabled && downloadsEnabled && allowFavoritesDownload;
+  const canShowFullDownload = downloadsEnabled && allowFullDownload;
+  const canShowSingleDownload = downloadsEnabled && allowSingleDownload;
+
+  function updatePhotoParam(photoId: string | null) {
+    const params = new URLSearchParams(window.location.search);
+
+    if (photoId) {
+      params.set("photo", photoId);
+    } else {
+      params.delete("photo");
+    }
+
+    const nextQuery = params.toString();
+    router.replace(nextQuery ? `${pathname}?${nextQuery}` : pathname, { scroll: false });
+  }
+
+  function openPhoto(index: number) {
+    const photo = visiblePhotos[index];
+    if (photo) {
+      setActiveIndex(index);
+      updatePhotoParam(photo.id);
+    }
+  }
+
+  function closePhotoViewer() {
+    updatePhotoParam(null);
+  }
 
   return (
     <>
-      <section className="sticky top-[78px] z-10 rounded-[22px] border border-slate-200 bg-white px-3 py-3 shadow-[0_16px_40px_rgba(15,23,42,0.08)] md:top-[92px] md:rounded-[30px] md:px-5 md:py-4">
-        <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
-          <div className="space-y-3">
-            <div className="-mx-1 flex snap-x snap-mandatory gap-2 overflow-x-auto px-1 pb-1 md:mx-0 md:flex-wrap md:overflow-visible md:px-0 md:pb-0 md:gap-3 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-            {favoritesEnabled ? (
+      <div className="sticky top-0 z-10 -mx-3 bg-gradient-to-b from-white via-white/96 to-white/0 px-3 pt-4 pb-5 dark:from-[#0b1120] dark:via-[#0b1120]/96 dark:to-[#0b1120]/0 md:-mx-5 md:px-5 md:pt-6 md:pb-6">
+        <section className="rounded-[20px] border border-slate-200 bg-white px-3 py-3.5 shadow-[0_14px_34px_rgba(15,23,42,0.07)] md:rounded-[28px] md:px-4 md:py-4">
+          <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
+            <div className="-mx-1 flex snap-x snap-mandatory flex-nowrap items-center gap-2 overflow-x-auto px-1 pb-1 xl:mx-0 xl:flex-wrap xl:overflow-visible xl:px-0 xl:pb-0 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+            <div className="shrink-0 snap-start rounded-full border border-slate-200 px-4 py-2 text-[11px] font-bold uppercase tracking-[0.14em] text-slate-500 md:px-4 md:py-2.5 md:text-sm md:tracking-[0.16em]">
+              <span className="inline-flex items-center gap-2">
+                <Images className="size-3.5" />
+                <span>{visiblePhotos.length}</span>
+              </span>
+            </div>
+            {canShowFavoritesFlow ? (
               <>
                 <button
                   type="button"
                   onClick={() => setShowOnlyFavorites(false)}
-                  className={`shrink-0 snap-start rounded-full border px-4 py-2.5 text-xs font-bold uppercase tracking-[0.14em] transition md:px-5 md:py-3 md:text-sm md:tracking-[0.18em] ${
+                  className={`shrink-0 snap-start rounded-full border px-4 py-2 text-[11px] font-bold uppercase tracking-[0.14em] transition md:px-4 md:py-2.5 md:text-sm md:tracking-[0.16em] ${
                     !showOnlyFavorites ? "border-lime-300 bg-lime-50 text-lime-700" : "border-slate-200 text-slate-500"
                   }`}
                 >
@@ -358,70 +498,76 @@ export function GalleryExperience({
                 <button
                   type="button"
                   onClick={() => setShowOnlyFavorites((current) => !current)}
-                  className={`shrink-0 snap-start rounded-full border px-4 py-2.5 text-xs font-bold uppercase tracking-[0.14em] transition md:px-5 md:py-3 md:text-sm md:tracking-[0.18em] ${
+                  className={`shrink-0 snap-start rounded-full border px-4 py-2 text-[11px] font-bold uppercase tracking-[0.14em] transition md:px-4 md:py-2.5 md:text-sm md:tracking-[0.16em] ${
                     showOnlyFavorites ? "border-fuchsia-300 bg-fuchsia-50 text-fuchsia-700" : "border-slate-200 text-slate-700"
                   }`}
                 >
-                  Mis favoritas ({favoriteIds.length})
+                  <span className="inline-flex items-center gap-2">
+                    <Heart className={`size-3.5 ${showOnlyFavorites ? "fill-current" : ""}`} />
+                    <span>Favoritas {favoriteIds.length > 0 ? `(${favoriteIds.length})` : ""}</span>
+                  </span>
                 </button>
+                <Button
+                  type="button"
+                  variant="secondary"
+                  onClick={() => setShowSendFavorites(true)}
+                  disabled={favoriteIds.length === 0}
+                  className="shrink-0 min-h-10 px-4 py-2 text-[10px] tracking-[0.08em] disabled:cursor-not-allowed disabled:opacity-50 md:min-h-11 md:px-4 md:py-2.5 md:text-[11px] md:tracking-[0.12em]"
+                >
+                  <Send className="mr-2 size-4" />
+                  Enviar favoritas
+                </Button>
               </>
             ) : null}
-            <div className="shrink-0 snap-start rounded-full border border-slate-200 px-4 py-2.5 text-xs font-bold uppercase tracking-[0.14em] text-slate-500 md:px-5 md:py-3 md:text-sm md:tracking-[0.18em]">
-              {visiblePhotos.length} fotos
             </div>
-            </div>
-            {bibRecognitionEnabled ? (
-              <label className="flex max-w-sm items-center gap-3 rounded-[18px] border border-slate-200 bg-slate-50 px-4 py-3">
-                <Search className="size-4 text-slate-400" />
-                <input
-                  value={bibQuery}
-                  onChange={(event) => setBibQuery(event.target.value.replace(/\D+/g, ""))}
-                  placeholder="Buscar por numero de bib"
-                  className="w-full bg-transparent text-sm font-medium text-slate-700 outline-none placeholder:text-slate-400"
-                />
-              </label>
-            ) : null}
-          </div>
 
-          <div className="grid gap-2 sm:grid-cols-2 xl:min-w-[520px] xl:gap-3">
-            <Button
-              variant="pink"
-              onClick={() => startDownload({ type: "favorites" })}
-              disabled={!favoritesEnabled || !allowFavoritesDownload || favoriteIds.length === 0}
-              className="w-full justify-center px-3 py-2.5 text-[11px] tracking-[0.08em] disabled:cursor-not-allowed disabled:opacity-50 md:px-4 md:py-3 md:text-sm md:tracking-[0.16em]"
-            >
-              <Heart className="mr-2 size-4" />
-              Descargar favoritas
-            </Button>
-            <Button
-              onClick={() => startDownload({ type: "all" })}
-              disabled={!downloadsEnabled || !allowFullDownload}
-              className="w-full justify-center px-3 py-2.5 text-[11px] tracking-[0.08em] disabled:cursor-not-allowed disabled:opacity-50 md:px-4 md:py-3 md:text-sm md:tracking-[0.16em]"
-            >
-              <Download className="mr-2 size-4" />
-              Descargar todo
-            </Button>
+            <div className="flex flex-col gap-2 xl:min-w-[600px] xl:items-end">
+              <div className="flex flex-wrap items-center justify-end gap-2">
+                {bibRecognitionEnabled ? (
+                  <label className="flex min-w-[220px] items-center gap-3 rounded-[16px] border border-slate-200 bg-slate-50 px-4 py-2.5">
+                  <Search className="size-4 text-slate-400" />
+                  <input
+                    value={bibQuery}
+                    onChange={(event) => setBibQuery(event.target.value.replace(/\D+/g, ""))}
+                    placeholder="Buscar por numero de bib"
+                    className="w-full bg-transparent text-sm font-medium text-slate-700 outline-none placeholder:text-slate-400"
+                  />
+                  </label>
+                ) : null}
+                {canShowFavoritesDownload ? (
+                  <Button
+                    variant="pink"
+                    onClick={() => void startDownload({ type: "favorites" })}
+                    disabled={favoriteIds.length === 0}
+                    className="min-h-10 shrink-0 justify-center px-4 py-2.5 text-[10px] tracking-[0.06em] disabled:cursor-not-allowed disabled:opacity-50 md:min-h-11 md:px-4 md:text-[11px] md:tracking-[0.12em]"
+                  >
+                    <Heart className="mr-2 size-4" />
+                    Descargar favoritas
+                  </Button>
+                ) : null}
+                {canShowFullDownload ? (
+                  <Button
+                    onClick={() => void startDownload({ type: "all" })}
+                    className="min-h-10 shrink-0 justify-center px-4 py-2.5 text-[10px] tracking-[0.06em] md:min-h-11 md:px-4 md:text-[11px] md:tracking-[0.12em]"
+                  >
+                    <Download className="mr-2 size-4" />
+                    Descargar todo
+                  </Button>
+                ) : null}
+                <CopyPublicLinkButton
+                  slug={slug}
+                  className="min-h-10 shrink-0 px-4 py-2.5 text-[10px] tracking-[0.08em] md:min-h-11 md:text-[11px] md:tracking-[0.12em]"
+                  defaultLabel="Enlace"
+                  copiedLabel="Copiado"
+                />
+              </div>
+            </div>
           </div>
-        </div>
-        {favoritesEnabled ? (
-        <div className="mt-3 flex flex-wrap justify-end gap-2 md:gap-3">
-          <CopyPublicLinkButton slug={slug} />
-          <Button
-            type="button"
-            variant="secondary"
-            onClick={() => setShowSendFavorites(true)}
-            disabled={favoriteIds.length === 0}
-            className="px-4 py-3 text-[11px] tracking-[0.12em] disabled:cursor-not-allowed disabled:opacity-50 md:text-sm md:tracking-[0.16em]"
-          >
-            <Send className="mr-2 size-4" />
-            Enviar favoritas
-          </Button>
-        </div>
-        ) : null}
-      </section>
+        </section>
+      </div>
 
       {visiblePhotos.length > 0 ? (
-        <PhotoGrid photos={visiblePhotos} onPhotoClick={setActiveIndex} onFavoriteToggle={toggleFavorite} />
+        <PhotoGrid photos={visiblePhotos} onPhotoClick={openPhoto} onFavoriteToggle={toggleFavorite} />
       ) : (
         <div className="rounded-[30px] border border-dashed border-slate-300 bg-white px-6 py-14 text-center shadow-[0_14px_35px_rgba(15,23,42,0.06)]">
           <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-fuchsia-50 text-fuchsia-600">
@@ -437,7 +583,7 @@ export function GalleryExperience({
           <div className="flex min-h-screen items-center justify-center px-3 py-3 sm:px-4 sm:py-6 lg:px-10">
             <button
               type="button"
-              onClick={() => setActiveIndex(null)}
+              onClick={closePhotoViewer}
               className="absolute right-3 top-3 z-10 rounded-full border border-slate-200 bg-white p-2.5 text-slate-400 shadow-[0_10px_25px_rgba(15,23,42,0.10)] transition hover:text-slate-700 sm:right-5 sm:top-5 sm:p-3"
               aria-label="Cerrar visor"
             >
@@ -464,7 +610,11 @@ export function GalleryExperience({
 
             <div className="relative w-full max-w-[1280px]">
               <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_260px] lg:items-center xl:gap-6">
-                <div className="relative overflow-hidden rounded-[24px] border border-slate-200 bg-white shadow-[0_24px_60px_rgba(15,23,42,0.14)] sm:rounded-[34px]">
+                <div
+                  className="relative overflow-hidden rounded-[24px] border border-slate-200 bg-white shadow-[0_24px_60px_rgba(15,23,42,0.14)] sm:rounded-[34px]"
+                  onTouchStart={handleViewerTouchStart}
+                  onTouchEnd={handleViewerTouchEnd}
+                >
                   <img src={resolvedActivePhoto.url} alt={resolvedActivePhoto.title} className="max-h-[72vh] w-full object-contain bg-[#fcfcfb] sm:max-h-[82vh]" />
                   <div className="absolute left-4 top-4 text-xs font-extrabold tracking-[0.18em] text-white drop-shadow-[0_6px_18px_rgba(15,23,42,0.62)] sm:left-5 sm:top-5 sm:text-sm">
                     {resolvedActivePhoto.isCover ? "IMPORTADA" : `${activePosition}`}
@@ -479,7 +629,7 @@ export function GalleryExperience({
                     <p className="text-2xl font-black tracking-tight text-slate-950">{albumTitle}</p>
                   </div>
 
-                    {favoritesEnabled ? (
+                    {canShowFavoritesFlow ? (
                     <button
                       type="button"
                       className={`inline-flex flex-1 items-center justify-center gap-2 rounded-full px-3 py-3 text-[11px] font-extrabold uppercase tracking-[0.12em] transition sm:min-w-[190px] sm:flex-none sm:px-5 lg:min-w-0 lg:w-full lg:justify-center ${
@@ -491,25 +641,35 @@ export function GalleryExperience({
                       Favorita
                     </button>
                     ) : null}
-                    <button
-                      type="button"
-                      disabled={!allowSingleDownload}
-                      className="inline-flex flex-1 items-center justify-center gap-2 rounded-full px-3 py-3 text-[11px] font-extrabold uppercase tracking-[0.12em] text-slate-500 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-45 sm:min-w-[190px] sm:flex-none sm:px-5 lg:min-w-0 lg:w-full lg:justify-center"
-                      onClick={() =>
-                        startDownload({
-                          type: "single",
-                          photoUrl: resolvedActivePhoto.url,
-                          photoTitle: resolvedActivePhoto.title
-                        })
-                      }
-                    >
-                      <Download className="size-4" />
-                      Descargar
-                    </button>
+                    {canShowSingleDownload ? (
+                      <button
+                        type="button"
+                        className="inline-flex flex-1 items-center justify-center gap-2 rounded-full px-3 py-3 text-[11px] font-extrabold uppercase tracking-[0.12em] text-slate-500 transition hover:bg-slate-100 sm:min-w-[190px] sm:flex-none sm:px-5 lg:min-w-0 lg:w-full lg:justify-center"
+                          onClick={() =>
+                          void startDownload({
+                            type: "single",
+                            photoUrl: resolvedActivePhoto.url,
+                            photoTitle: resolvedActivePhoto.title
+                          })
+                        }
+                      >
+                        <Download className="size-4" />
+                        Descargar
+                      </button>
+                    ) : null}
+                  {activePhotoUrl ? (
+                    <CopyPublicLinkButton
+                      slug={slug}
+                      url={activePhotoUrl}
+                      defaultLabel="Copiar foto"
+                      copiedLabel="Foto copiada"
+                      className="inline-flex flex-1 items-center justify-center gap-2 px-3 py-3 text-[11px] tracking-[0.12em] sm:min-w-[190px] sm:flex-none sm:px-5 lg:min-w-0 lg:w-full lg:justify-center"
+                    />
+                  ) : null}
                   <button
                     type="button"
                     className="hidden rounded-full border border-slate-200 px-4 py-3 text-[11px] font-extrabold uppercase tracking-[0.14em] text-slate-500 transition hover:border-slate-300 hover:text-slate-900 lg:inline-flex lg:items-center lg:justify-center"
-                    onClick={() => setActiveIndex(null)}
+                    onClick={closePhotoViewer}
                   >
                     Cerrar visor
                   </button>

@@ -19,7 +19,8 @@ export const dashboardAlbums: AlbumSummary[] = [
     permissions: {
       allowSingleDownload: true,
       allowFavoritesDownload: true,
-      allowFullDownload: false
+      allowFullDownload: false,
+      hasFullDownloadPassword: false
     }
   },
   {
@@ -40,7 +41,8 @@ export const dashboardAlbums: AlbumSummary[] = [
     permissions: {
       allowSingleDownload: true,
       allowFavoritesDownload: true,
-      allowFullDownload: true
+      allowFullDownload: true,
+      hasFullDownloadPassword: false
     }
   }
 ];

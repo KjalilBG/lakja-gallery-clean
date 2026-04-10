@@ -339,6 +339,32 @@ export default async function AlbumDetailPage({ params, searchParams }: AlbumDet
                 </div>
               </div>
             </label>
+            <div className="rounded-[22px] border border-slate-200 bg-slate-50 p-4 md:col-span-3">
+              <div className="grid gap-4 md:grid-cols-[220px_1fr] md:items-start">
+                <div>
+                  <p className="font-bold text-slate-900">Contrasena de descarga completa</p>
+                  <p className="mt-1 text-sm text-slate-500">
+                    {album.permissions.hasFullDownloadPassword
+                      ? "Ya hay una contrasena activa. Solo protege el ZIP completo y no cambia el acceso al album."
+                      : "Si la configuras, se pedira solo cuando descarguen el album completo."}
+                  </p>
+                </div>
+                <label className="space-y-2">
+                  <span className="text-sm font-bold text-slate-500">Nueva contrasena</span>
+                  <input
+                    name="fullDownloadPassword"
+                    type="password"
+                    minLength={4}
+                    placeholder={
+                      album.permissions.hasFullDownloadPassword
+                        ? "Escribe una nueva para reemplazar la actual"
+                        : "Opcional, minimo 4 caracteres"
+                    }
+                    className="w-full rounded-[20px] border border-slate-200 bg-white px-4 py-3 outline-none transition focus:border-lime-400"
+                  />
+                </label>
+              </div>
+            </div>
             <label className="rounded-[22px] border border-slate-200 bg-slate-50 p-4 md:col-span-3">
               <div className="flex items-start gap-3">
                 <input

@@ -34,6 +34,7 @@ const albumSchema = z.object({
   coverFocusX: z.coerce.number().min(0).max(100).optional(),
   coverFocusY: z.coerce.number().min(0).max(100).optional(),
   password: z.string().trim().optional(),
+  fullDownloadPassword: z.string().trim().optional(),
   allowSingleDownload: z.boolean(),
   allowFavoritesDownload: z.boolean(),
   allowFullDownload: z.boolean(),
@@ -53,6 +54,7 @@ export async function createAlbumAction(formData: FormData) {
     coverFocusX: formData.get("coverFocusX") || undefined,
     coverFocusY: formData.get("coverFocusY") || undefined,
     password: formData.get("password") || undefined,
+    fullDownloadPassword: formData.get("fullDownloadPassword") || undefined,
     allowSingleDownload: formData.get("allowSingleDownload") === "on",
     allowFavoritesDownload: formData.get("allowFavoritesDownload") === "on",
     allowFullDownload: formData.get("allowFullDownload") === "on",
@@ -63,13 +65,18 @@ export async function createAlbumAction(formData: FormData) {
     throw new Error("La contrasena del album debe tener al menos 4 caracteres.");
   }
 
+  if (parsed.allowFullDownload && parsed.fullDownloadPassword && parsed.fullDownloadPassword.length < 4) {
+    throw new Error("La contrasena de descarga completa debe tener al menos 4 caracteres.");
+  }
+
   const photos = formData
     .getAll("photos")
     .filter((entry): entry is File => entry instanceof File && entry.size > 0);
 
   const album = await createAlbum({
     ...parsed,
-    passwordHash: parsed.visibility === AlbumVisibility.PASSWORD && parsed.password ? hashPassword(parsed.password) : null
+    passwordHash: parsed.visibility === AlbumVisibility.PASSWORD && parsed.password ? hashPassword(parsed.password) : null,
+    fullDownloadPasswordHash: parsed.allowFullDownload && parsed.fullDownloadPassword ? hashPassword(parsed.fullDownloadPassword) : null
   });
 
   if (photos.length > 0) {
@@ -145,6 +152,7 @@ export async function updateAlbumAction(formData: FormData) {
     coverFocusX: formData.get("coverFocusX") || undefined,
     coverFocusY: formData.get("coverFocusY") || undefined,
     password: formData.get("password") || undefined,
+    fullDownloadPassword: formData.get("fullDownloadPassword") || undefined,
     allowSingleDownload: formData.get("allowSingleDownload") === "on",
     allowFavoritesDownload: formData.get("allowFavoritesDownload") === "on",
     allowFullDownload: formData.get("allowFullDownload") === "on",
@@ -161,12 +169,31 @@ export async function updateAlbumAction(formData: FormData) {
     throw new Error("La contrasena del album debe tener al menos 4 caracteres.");
   }
 
+  if (
+    parsed.allowFullDownload &&
+    !currentAlbum.fullDownloadPasswordHash &&
+    parsed.fullDownloadPassword &&
+    parsed.fullDownloadPassword.length < 4
+  ) {
+    throw new Error("La contrasena de descarga completa debe tener al menos 4 caracteres.");
+  }
+
+  if (parsed.allowFullDownload && parsed.fullDownloadPassword && parsed.fullDownloadPassword.length < 4) {
+    throw new Error("La contrasena de descarga completa debe tener al menos 4 caracteres.");
+  }
+
   const album = await updateAlbum(albumId, {
     ...parsed,
     passwordHash:
       parsed.visibility === AlbumVisibility.PASSWORD
         ? parsed.password && parsed.password.length >= 4
           ? hashPassword(parsed.password)
+          : undefined
+        : null,
+    fullDownloadPasswordHash:
+      parsed.allowFullDownload
+        ? parsed.fullDownloadPassword && parsed.fullDownloadPassword.length >= 4
+          ? hashPassword(parsed.fullDownloadPassword)
           : undefined
         : null
   });

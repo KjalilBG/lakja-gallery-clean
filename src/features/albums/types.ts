@@ -2,6 +2,7 @@ export type AlbumPermissionSet = {
   allowSingleDownload: boolean;
   allowFavoritesDownload: boolean;
   allowFullDownload: boolean;
+  hasFullDownloadPassword: boolean;
 };
 
 export type AlbumSummary = {

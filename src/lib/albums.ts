@@ -76,6 +76,10 @@ export function buildBrandedPhotoFileName(baseName: string, extension: string) {
   return `${baseName}_@LaKja.top${extension}`;
 }
 
+function buildBrandedZipFileName(baseName: string) {
+  return `${baseName}_@LaKja.top.zip`;
+}
+
 function cleanZipName(input: string) {
   return input
     .normalize("NFD")
@@ -291,6 +295,7 @@ export async function createAlbum(input: {
   coverFocusX?: number;
   coverFocusY?: number;
   passwordHash?: string | null;
+  fullDownloadPasswordHash?: string | null;
   allowSingleDownload: boolean;
   allowFavoritesDownload: boolean;
   allowFullDownload: boolean;
@@ -308,9 +313,10 @@ export async function createAlbum(input: {
       status: input.status,
       visibility: input.visibility,
       coverPosition: input.coverPosition ?? CoverPosition.CENTER,
-      coverFocusX: input.coverFocusX ?? 50,
-      coverFocusY: input.coverFocusY ?? 50,
+        coverFocusX: input.coverFocusX ?? 50,
+        coverFocusY: input.coverFocusY ?? 50,
         passwordHash: input.visibility === AlbumVisibility.PASSWORD ? input.passwordHash ?? null : null,
+        fullDownloadPasswordHash: input.allowFullDownload ? input.fullDownloadPasswordHash ?? null : null,
         allowSingleDownload: input.allowSingleDownload,
         allowFavoritesDownload: input.allowFavoritesDownload,
         allowFullDownload: input.allowFullDownload,
@@ -332,6 +338,7 @@ export async function updateAlbum(
     coverFocusX?: number;
     coverFocusY?: number;
     passwordHash?: string | null;
+    fullDownloadPasswordHash?: string | null;
     allowSingleDownload: boolean;
     allowFavoritesDownload: boolean;
     allowFullDownload: boolean;
@@ -352,6 +359,7 @@ export async function updateAlbum(
     coverFocusX: number;
     coverFocusY: number;
       passwordHash?: string | null;
+      fullDownloadPasswordHash?: string | null;
       allowSingleDownload: boolean;
       allowFavoritesDownload: boolean;
       allowFullDownload: boolean;
@@ -370,6 +378,7 @@ export async function updateAlbum(
       allowSingleDownload: input.allowSingleDownload,
       allowFavoritesDownload: input.allowFavoritesDownload,
       allowFullDownload: input.allowFullDownload,
+      fullDownloadPasswordHash: input.allowFullDownload ? input.fullDownloadPasswordHash ?? null : null,
       bibRecognitionEnabled: input.bibRecognitionEnabled ?? false
     };
 
@@ -377,6 +386,14 @@ export async function updateAlbum(
     updateData.passwordHash = null;
   } else if (input.passwordHash !== undefined) {
     updateData.passwordHash = input.passwordHash;
+  }
+
+  if (input.allowFullDownload) {
+    if (input.fullDownloadPasswordHash !== undefined) {
+      updateData.fullDownloadPasswordHash = input.fullDownloadPasswordHash;
+    }
+  } else {
+    updateData.fullDownloadPasswordHash = null;
   }
 
   return prisma.album.update({
@@ -419,7 +436,8 @@ export async function getAdminAlbums(): Promise<AlbumSummary[]> {
     permissions: {
       allowSingleDownload: album.allowSingleDownload,
       allowFavoritesDownload: album.allowFavoritesDownload,
-      allowFullDownload: album.allowFullDownload
+      allowFullDownload: album.allowFullDownload,
+      hasFullDownloadPassword: Boolean(album.fullDownloadPasswordHash)
     }
   }));
 }
@@ -460,7 +478,8 @@ export async function getPublishedAlbums(limit = 6): Promise<AlbumSummary[]> {
     permissions: {
       allowSingleDownload: album.allowSingleDownload,
       allowFavoritesDownload: album.allowFavoritesDownload,
-      allowFullDownload: album.allowFullDownload
+      allowFullDownload: album.allowFullDownload,
+      hasFullDownloadPassword: Boolean(album.fullDownloadPasswordHash)
     }
   }));
 }
@@ -506,7 +525,8 @@ export async function getHomepageAlbums(limit = 6, featuredAlbumIds: string[] = 
     permissions: {
       allowSingleDownload: album.allowSingleDownload,
       allowFavoritesDownload: album.allowFavoritesDownload,
-      allowFullDownload: album.allowFullDownload
+      allowFullDownload: album.allowFullDownload,
+      hasFullDownloadPassword: Boolean(album.fullDownloadPasswordHash)
     }
   }));
 
@@ -808,7 +828,8 @@ export async function getAdminAlbumById(id: string): Promise<AlbumDetail | null>
     permissions: {
       allowSingleDownload: album.allowSingleDownload,
       allowFavoritesDownload: album.allowFavoritesDownload,
-      allowFullDownload: album.allowFullDownload
+      allowFullDownload: album.allowFullDownload,
+      hasFullDownloadPassword: Boolean(album.fullDownloadPasswordHash)
     },
     favoriteSelections: album.favoriteSelections.map((selection) => ({
       id: selection.id,
@@ -852,6 +873,7 @@ export async function getAlbumPasswordMetaById(id: string) {
       id: true,
       slug: true,
       passwordHash: true,
+      fullDownloadPasswordHash: true,
       visibility: true
     }
   });
@@ -2341,6 +2363,7 @@ export async function getDownloadableAlbumPhotos(slug: string) {
       allowSingleDownload: true,
       allowFavoritesDownload: true,
       allowFullDownload: true,
+      fullDownloadPasswordHash: true,
       photos: {
         orderBy: { sortOrder: "asc" },
         select: {
@@ -2379,7 +2402,7 @@ export async function getOrCreateAlbumDownloadArchive(input: {
 }) {
   const signature = hashDownloadSignature(
     JSON.stringify({
-      version: 2,
+      version: 3,
       albumId: input.albumId,
       type: input.type,
       photos: input.photos.map((photo) => ({
@@ -2391,7 +2414,8 @@ export async function getOrCreateAlbumDownloadArchive(input: {
     })
   );
 
-  const zipName = `${cleanZipName(input.albumTitle)}-${input.type === "favorites" ? "favoritas" : "album"}.zip`;
+  const zipBaseName = `${cleanZipName(input.albumTitle)}-${input.type === "favorites" ? "favoritas" : "album"}`;
+  const zipName = buildBrandedZipFileName(zipBaseName);
   const objectKey = `downloads/${input.albumId}/${input.type}-${signature}.zip`;
   const storageKey = buildR2StorageKey("originals", objectKey);
 

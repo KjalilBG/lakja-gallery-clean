@@ -19,6 +19,7 @@ const createAlbumSchema = z.object({
   coverFocusX: z.coerce.number().min(0).max(100).optional(),
   coverFocusY: z.coerce.number().min(0).max(100).optional(),
   password: z.string().trim().optional(),
+  fullDownloadPassword: z.string().trim().optional(),
   allowSingleDownload: z.boolean(),
   allowFavoritesDownload: z.boolean(),
   allowFullDownload: z.boolean()
@@ -46,9 +47,18 @@ export async function POST(request: Request) {
       );
     }
 
+    if (parsed.allowFullDownload && parsed.fullDownloadPassword && parsed.fullDownloadPassword.length < 4) {
+      return NextResponse.json(
+        { ok: false, error: "La contrasena de descarga completa debe tener al menos 4 caracteres." },
+        { status: 400 }
+      );
+    }
+
     const album = await createAlbum({
       ...parsed,
-      passwordHash: parsed.visibility === AlbumVisibility.PASSWORD && parsed.password ? hashPassword(parsed.password) : null
+      passwordHash: parsed.visibility === AlbumVisibility.PASSWORD && parsed.password ? hashPassword(parsed.password) : null,
+      fullDownloadPasswordHash:
+        parsed.allowFullDownload && parsed.fullDownloadPassword ? hashPassword(parsed.fullDownloadPassword) : null
     });
 
     return NextResponse.json({

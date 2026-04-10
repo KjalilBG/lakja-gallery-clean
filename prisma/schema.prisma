@@ -10,6 +10,7 @@ datasource db {
 
 enum UserRole {
   ADMIN
+  STAFF
 }
 
 enum AlbumStatus {
@@ -61,6 +62,28 @@ enum JobStatus {
   FAILED
 }
 
+enum CoberturaStatus {
+  AGENDADO
+  SOLICITADO
+  REALIZADO
+  CANCELADO
+}
+
+enum PaymentType {
+  HOURLY
+  FLAT
+  MIXED
+}
+
+enum HistoryAction {
+  CREATED
+  UPDATED
+  STATUS_CHANGED
+  STAFF_REASSIGNED
+  DUPLICATED
+  DELETED
+}
+
 model User {
   id            String    @id @default(cuid())
   email         String    @unique
@@ -68,11 +91,19 @@ model User {
   image         String?
   emailVerified DateTime?
   role          UserRole  @default(ADMIN)
+  isActive      Boolean   @default(true)
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
   accounts      Account[]
   sessions      Session[]
   albums        Album[]
+  shortLinks    ShortLink[]
+  createdCoberturas   Cobertura[]         @relation("CoberturaCreatedBy")
+  updatedCoberturas   Cobertura[]         @relation("CoberturaUpdatedBy")
+  staffAssignments    CoberturaStaff[]
+  coberturaHistory    CoberturaHistory[]
+  coverageNotes       CoverageStaffNote[]
+  hourlyRates         StaffHonorario[]
 }
 
 model Account {
@@ -128,6 +159,7 @@ model Album {
   coverFocusX            Int              @default(50)
   coverFocusY            Int              @default(50)
   passwordHash           String?
+  fullDownloadPasswordHash String?
   allowSingleDownload    Boolean          @default(true)
   allowFavoritesDownload Boolean          @default(true)
   allowFullDownload      Boolean          @default(false)
@@ -287,4 +319,206 @@ model AdminNotebook {
   content    String   @default("")
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
+}
+
+model ShortLink {
+  id            String   @id @default(cuid())
+  slug          String   @unique
+  destinationUrl String
+  title         String?
+  note          String?
+  isActive      Boolean  @default(true)
+  clicks        Int      @default(0)
+  lastClickedAt DateTime?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  createdById   String?
+  createdBy     User?    @relation(fields: [createdById], references: [id], onDelete: SetNull)
+  clickEvents   ShortLinkClick[]
+
+  @@index([isActive, updatedAt])
+}
+
+model ShortLinkClick {
+  id           String    @id @default(cuid())
+  shortLinkId  String
+  referer      String?
+  sourceHost   String?
+  utmSource    String?
+  utmMedium    String?
+  utmCampaign  String?
+  country      String?
+  city         String?
+  userAgent    String?
+  createdAt    DateTime  @default(now())
+  shortLink    ShortLink  @relation(fields: [shortLinkId], references: [id], onDelete: Cascade)
+
+  @@index([shortLinkId, createdAt])
+  @@index([createdAt])
+  @@index([sourceHost])
+  @@index([utmSource])
+}
+
+model Campus {
+  id          String      @id @default(cuid())
+  nombre      String      @unique
+  slug        String      @unique
+  sortOrder   Int         @default(0)
+  isActive    Boolean     @default(true)
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+  coberturas  Cobertura[]
+  lugares     Lugar[]
+}
+
+model Seccion {
+  id          String      @id @default(cuid())
+  nombre      String      @unique
+  slug        String      @unique
+  sortOrder   Int         @default(0)
+  isActive    Boolean     @default(true)
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+  coberturas  Cobertura[]
+  presets     CoveragePreset[]
+}
+
+model Lugar {
+  id          String      @id @default(cuid())
+  nombre      String
+  slug        String
+  campusId    String?
+  sortOrder   Int         @default(0)
+  isActive    Boolean     @default(true)
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+  campus      Campus?     @relation(fields: [campusId], references: [id], onDelete: SetNull)
+  coberturas  Cobertura[]
+  presets     CoveragePreset[]
+
+  @@unique([campusId, slug])
+  @@index([campusId, nombre])
+}
+
+model Cobertura {
+  id                String               @id @default(cuid())
+  folio             Int
+  nombre            String
+  fecha             DateTime
+  horaInicio        String
+  duracion          Int
+  carpetaNombre     String
+  campusId          String?
+  seccionId         String?
+  lugarId           String?
+  estatus           CoberturaStatus      @default(AGENDADO)
+  comentarios       String?
+  detalles          String?
+  createdById       String
+  updatedById       String?
+  createdAt         DateTime             @default(now())
+  updatedAt         DateTime             @updatedAt
+  campus            Campus?              @relation(fields: [campusId], references: [id], onDelete: SetNull)
+  seccion           Seccion?             @relation(fields: [seccionId], references: [id], onDelete: SetNull)
+  lugar             Lugar?               @relation(fields: [lugarId], references: [id], onDelete: SetNull)
+  createdBy         User                 @relation("CoberturaCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  updatedBy         User?                @relation("CoberturaUpdatedBy", fields: [updatedById], references: [id], onDelete: SetNull)
+  staffAssignments  CoberturaStaff[]
+  history           CoberturaHistory[]
+  staffNotes        CoverageStaffNote[]
+
+  @@unique([fecha, folio])
+  @@index([fecha, estatus])
+  @@index([campusId, seccionId, lugarId])
+}
+
+model CoberturaStaff {
+  id            String      @id @default(cuid())
+  coberturaId   String
+  userId        String
+  isLead        Boolean     @default(false)
+  confirmedAt   DateTime?
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+  cobertura     Cobertura   @relation(fields: [coberturaId], references: [id], onDelete: Cascade)
+  user          User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([coberturaId, userId])
+  @@index([userId, createdAt])
+}
+
+model CoverageStaffNote {
+  id            String      @id @default(cuid())
+  coberturaId   String
+  userId        String
+  nota          String
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+  cobertura     Cobertura   @relation(fields: [coberturaId], references: [id], onDelete: Cascade)
+  user          User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([coberturaId, createdAt])
+}
+
+model StaffHonorario {
+  id             String        @id @default(cuid())
+  userId         String
+  paymentType    PaymentType   @default(HOURLY)
+  costoHora      Decimal?      @db.Decimal(10, 2)
+  transporte     Decimal?      @db.Decimal(10, 2)
+  reglaIguala1a2 Decimal?      @db.Decimal(10, 2)
+  reglaIguala3a4 Decimal?      @db.Decimal(10, 2)
+  reglaIguala5Plus Decimal?    @db.Decimal(10, 2)
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+  user           User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  rules          StaffHonorarioRule[]
+
+  @@unique([userId])
+}
+
+model StaffHonorarioRule {
+  id            String         @id @default(cuid())
+  honorarioId   String
+  label         String?
+  desdeHoras    Decimal?       @db.Decimal(10, 2)
+  hastaHoras    Decimal?       @db.Decimal(10, 2)
+  montoFijo     Decimal?       @db.Decimal(10, 2)
+  costoHora     Decimal?       @db.Decimal(10, 2)
+  transporte    Decimal?       @db.Decimal(10, 2)
+  sortOrder     Int            @default(0)
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+  honorario     StaffHonorario @relation(fields: [honorarioId], references: [id], onDelete: Cascade)
+
+  @@index([honorarioId, sortOrder])
+}
+
+model CoberturaHistory {
+  id            String         @id @default(cuid())
+  coberturaId   String
+  userId        String?
+  action        HistoryAction
+  field         String?
+  beforeValue   String?
+  afterValue    String?
+  createdAt     DateTime       @default(now())
+  cobertura     Cobertura      @relation(fields: [coberturaId], references: [id], onDelete: Cascade)
+  user          User?          @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([coberturaId, createdAt])
+}
+
+model CoveragePreset {
+  id          String    @id @default(cuid())
+  nombre      String    @unique
+  slug        String    @unique
+  duracion    Int
+  lugarId     String?
+  seccionId   String?
+  comentarios String?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  lugar       Lugar?    @relation(fields: [lugarId], references: [id], onDelete: SetNull)
+  seccion     Seccion?  @relation(fields: [seccionId], references: [id], onDelete: SetNull)
 }
