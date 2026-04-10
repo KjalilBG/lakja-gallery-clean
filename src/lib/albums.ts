@@ -764,28 +764,28 @@ export async function getAdminAlbumById(id: string): Promise<AlbumDetail | null>
   const retryablePhotosCount = album.photos.filter(
     (photo) => photo.status === PhotoStatus.FAILED || !photo.previewKey || !photo.thumbKey
   ).length;
-  const topDownloadedPhotos = Array.from(
-    album.downloads.reduce((map, download) => {
-      if (!download.photoId) {
-        return map;
-      }
-
-      const current = map.get(download.photoId);
-      if (current) {
-        current.downloadCount += 1;
-        if (download.createdAt > current.lastDownloadedAt) {
-          current.lastDownloadedAt = download.createdAt;
-        }
-        return map;
-      }
-
-      map.set(download.photoId, {
-        downloadCount: 1,
-        lastDownloadedAt: download.createdAt
-      });
+  const downloadStatsByPhotoId = album.downloads.reduce((map, download) => {
+    if (!download.photoId) {
       return map;
-    }, new Map<string, { downloadCount: number; lastDownloadedAt: Date }>())
-  )
+    }
+
+    const current = map.get(download.photoId);
+    if (current) {
+      current.downloadCount += 1;
+      if (download.createdAt > current.lastDownloadedAt) {
+        current.lastDownloadedAt = download.createdAt;
+      }
+      return map;
+    }
+
+    map.set(download.photoId, {
+      downloadCount: 1,
+      lastDownloadedAt: download.createdAt
+    });
+    return map;
+  }, new Map<string, { downloadCount: number; lastDownloadedAt: Date }>());
+
+  const topDownloadedPhotos = Array.from(downloadStatsByPhotoId)
     .map(([photoId, stats]) => {
       const photo = album.photos.find((item) => item.id === photoId);
 
@@ -810,6 +810,57 @@ export async function getAdminAlbumById(id: string): Promise<AlbumDetail | null>
       return right.lastDownloadedAt.localeCompare(left.lastDownloadedAt);
     })
     .slice(0, 8);
+
+  const favoriteCountByPhotoId = album.favoriteSelections.reduce((map, selection) => {
+    for (const item of selection.items) {
+      const current = map.get(item.photo.id) ?? 0;
+      map.set(item.photo.id, current + 1);
+    }
+
+    return map;
+  }, new Map<string, number>());
+
+  const photoDeliveryInsights = album.photos
+    .map((photo) => {
+      const aggregatedDownloadStats = downloadStatsByPhotoId.get(photo.id);
+      const favoriteCount = favoriteCountByPhotoId.get(photo.id) ?? 0;
+      const downloadCount = aggregatedDownloadStats?.downloadCount ?? 0;
+
+      if (downloadCount === 0 && favoriteCount === 0) {
+        return null;
+      }
+
+      return {
+        id: photo.id,
+        title: buildPublicPhotoTitle(album.title, photo.sortOrder),
+        thumbUrl: photo.thumbKey ? toMediaRoute(photo.thumbKey) : buildPhotoUrl(photo),
+        downloadCount,
+        favoriteCount,
+        lastDownloadedAt: aggregatedDownloadStats?.lastDownloadedAt.toISOString() ?? null,
+        sortOrder: photo.sortOrder
+      };
+    })
+    .filter((value): value is NonNullable<typeof value> => Boolean(value))
+    .sort((left, right) => {
+      if (right.downloadCount !== left.downloadCount) {
+        return right.downloadCount - left.downloadCount;
+      }
+
+      if (right.favoriteCount !== left.favoriteCount) {
+        return right.favoriteCount - left.favoriteCount;
+      }
+
+      if (left.lastDownloadedAt && right.lastDownloadedAt && left.lastDownloadedAt !== right.lastDownloadedAt) {
+        return right.lastDownloadedAt.localeCompare(left.lastDownloadedAt);
+      }
+
+      if (left.lastDownloadedAt !== right.lastDownloadedAt) {
+        return left.lastDownloadedAt ? -1 : 1;
+      }
+
+      return left.sortOrder - right.sortOrder;
+    })
+    .map(({ sortOrder: _sortOrder, ...insight }) => insight);
 
   return {
     id: album.id,
@@ -909,6 +960,7 @@ export async function getAdminAlbumById(id: string): Promise<AlbumDetail | null>
       }))
     })),
     topDownloadedPhotos,
+    photoDeliveryInsights,
     photos: album.photos.map((photo) => ({
       id: photo.id,
       url: buildPhotoUrl(photo),

@@ -201,22 +201,6 @@ export default async function AlbumDetailPage({ params, searchParams }: AlbumDet
           </div>
           <p className="mt-3 text-3xl font-black text-slate-950">{album.downloads}</p>
           <p className="mt-2 text-sm text-slate-500">Incluye descargas individuales y ZIP del album.</p>
-          {album.topDownloadedPhotos && album.topDownloadedPhotos.length > 0 ? (
-            <div className="mt-4 space-y-2 border-t border-slate-200 pt-4">
-              <p className="text-[11px] font-extrabold uppercase tracking-[0.18em] text-slate-400">Mas descargadas</p>
-              {album.topDownloadedPhotos.slice(0, 3).map((photo) => (
-                <div key={photo.id} className="flex items-center gap-3 rounded-[18px] border border-slate-200 bg-slate-50 px-3 py-2">
-                  <img src={photo.thumbUrl} alt={photo.title} className="h-11 w-11 rounded-[12px] object-cover" />
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate text-sm font-bold text-slate-900">{photo.title}</p>
-                    <p className="text-xs font-medium text-slate-500">
-                      {photo.downloadCount} descarga(s) · ultima {formatDate(photo.lastDownloadedAt)}
-                    </p>
-                  </div>
-                </div>
-              ))}
-            </div>
-          ) : null}
         </div>
         <div className="rounded-[28px] border border-slate-200 bg-white px-5 py-5 shadow-[0_12px_30px_rgba(15,23,42,0.05)]">
           <div className="flex items-center gap-3 text-slate-400">
@@ -412,6 +396,48 @@ export default async function AlbumDetailPage({ params, searchParams }: AlbumDet
               processedAt={album.bibRecognitionProcessedAt ? formatDate(album.bibRecognitionProcessedAt) : null}
               job={album.bibJob}
             />
+          ) : null}
+
+          {album.photoDeliveryInsights && album.photoDeliveryInsights.length > 0 ? (
+            <div className="rounded-[30px] border border-slate-200 bg-white p-6 shadow-[0_12px_30px_rgba(15,23,42,0.05)]">
+              <div className="flex items-center gap-3">
+                <Download className="size-5 text-slate-500" />
+                <p className="font-black uppercase tracking-[0.18em] text-slate-900">Lectura de entregas</p>
+              </div>
+              <p className="mt-4 text-sm leading-7 text-slate-500">
+                Aqui ves todas las fotos que ya descargaron o que aparecieron en listas de favoritas.
+              </p>
+              <div className="mt-4 max-h-[420px] space-y-3 overflow-y-auto pr-1">
+                {album.photoDeliveryInsights.map((photo) => (
+                  <div key={photo.id} className="flex items-center gap-3 rounded-[18px] border border-slate-200 bg-slate-50 px-3 py-3">
+                    <img src={photo.thumbUrl} alt={photo.title} className="h-12 w-12 rounded-[12px] object-cover" />
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-sm font-bold text-slate-900">{photo.title}</p>
+                      <p className="mt-1 text-xs font-medium text-slate-500">
+                        {photo.downloadCount} descarga(s) · {photo.favoriteCount} favorita(s)
+                      </p>
+                      <div className="mt-2 flex flex-wrap gap-2">
+                        {photo.downloadCount > 0 ? (
+                          <span className="rounded-full bg-sky-100 px-2.5 py-1 text-[10px] font-extrabold uppercase tracking-[0.14em] text-sky-700">
+                            Descargada
+                          </span>
+                        ) : null}
+                        {photo.favoriteCount > 0 ? (
+                          <span className="rounded-full bg-lime-100 px-2.5 py-1 text-[10px] font-extrabold uppercase tracking-[0.14em] text-lime-700">
+                            Favorita
+                          </span>
+                        ) : null}
+                      </div>
+                      {photo.lastDownloadedAt ? (
+                        <p className="mt-2 text-[11px] font-bold uppercase tracking-[0.12em] text-slate-400">
+                          Ultima descarga {formatDate(photo.lastDownloadedAt)}
+                        </p>
+                      ) : null}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
           ) : null}
 
           <div className="rounded-[30px] border border-rose-200 bg-white p-6 shadow-[0_12px_30px_rgba(15,23,42,0.05)]">

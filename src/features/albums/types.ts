@@ -102,6 +102,14 @@ export type AlbumDetail = {
     downloadCount: number;
     lastDownloadedAt: string;
   }[];
+  photoDeliveryInsights?: {
+    id: string;
+    title: string;
+    thumbUrl: string;
+    downloadCount: number;
+    favoriteCount: number;
+    lastDownloadedAt: string | null;
+  }[];
 };
 
 export type FavoriteSelectionSummary = {
