@@ -4,6 +4,10 @@ export const MAX_PARALLEL_UPLOADS = 3;
 export const MAX_FILES_PER_REQUEST = MAX_PARALLEL_UPLOADS;
 const MAX_UPLOAD_RETRIES = 2;
 const RETRY_DELAY_MS = 1200;
+const uploadFileNameCollator = new Intl.Collator("es-MX", {
+  numeric: true,
+  sensitivity: "base"
+});
 
 export type UploadQueuePhase = "queued" | "uploading" | "processing" | "done" | "error";
 
@@ -55,6 +59,24 @@ export type UploadBatchResult = {
   failures: Array<{ fileId: string; fileName: string; message: string }>;
   reservedSortOrders: Record<string, number>;
 };
+
+export function sortUploadQueueItems<T extends { file: File }>(items: T[]) {
+  return [...items].sort((left, right) => {
+    const leftTimestamp = left.file.lastModified || 0;
+    const rightTimestamp = right.file.lastModified || 0;
+
+    if (leftTimestamp > 0 && rightTimestamp > 0 && leftTimestamp !== rightTimestamp) {
+      return leftTimestamp - rightTimestamp;
+    }
+
+    const fileNameComparison = uploadFileNameCollator.compare(left.file.name, right.file.name);
+    if (fileNameComparison !== 0) {
+      return fileNameComparison;
+    }
+
+    return left.file.size - right.file.size;
+  });
+}
 
 function wait(ms: number) {
   return new Promise((resolve) => window.setTimeout(resolve, ms));

@@ -201,6 +201,22 @@ export default async function AlbumDetailPage({ params, searchParams }: AlbumDet
           </div>
           <p className="mt-3 text-3xl font-black text-slate-950">{album.downloads}</p>
           <p className="mt-2 text-sm text-slate-500">Incluye descargas individuales y ZIP del album.</p>
+          {album.topDownloadedPhotos && album.topDownloadedPhotos.length > 0 ? (
+            <div className="mt-4 space-y-2 border-t border-slate-200 pt-4">
+              <p className="text-[11px] font-extrabold uppercase tracking-[0.18em] text-slate-400">Mas descargadas</p>
+              {album.topDownloadedPhotos.slice(0, 3).map((photo) => (
+                <div key={photo.id} className="flex items-center gap-3 rounded-[18px] border border-slate-200 bg-slate-50 px-3 py-2">
+                  <img src={photo.thumbUrl} alt={photo.title} className="h-11 w-11 rounded-[12px] object-cover" />
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-sm font-bold text-slate-900">{photo.title}</p>
+                    <p className="text-xs font-medium text-slate-500">
+                      {photo.downloadCount} descarga(s) · ultima {formatDate(photo.lastDownloadedAt)}
+                    </p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : null}
         </div>
         <div className="rounded-[28px] border border-slate-200 bg-white px-5 py-5 shadow-[0_12px_30px_rgba(15,23,42,0.05)]">
           <div className="flex items-center gap-3 text-slate-400">

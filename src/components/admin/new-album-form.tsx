@@ -5,7 +5,13 @@ import { useRouter } from "next/navigation";
 import { AlbumStatus, AlbumVisibility } from "@prisma/client";
 import { ImagePlus, LoaderCircle, UploadCloud, X } from "lucide-react";
 
-import { MAX_FILES_PER_REQUEST, type UploadQueueItem, type UploadQueuePhase, uploadPhotoBatches } from "@/components/admin/upload-photo-batches";
+import {
+  MAX_FILES_PER_REQUEST,
+  sortUploadQueueItems,
+  type UploadQueueItem,
+  type UploadQueuePhase,
+  uploadPhotoBatches
+} from "@/components/admin/upload-photo-batches";
 import { Button } from "@/components/ui/button";
 
 const optionCards = [
@@ -65,6 +71,7 @@ export function NewAlbumForm() {
   const [submitPhase, setSubmitPhase] = useState<SubmitPhase>("idle");
   const [batchLabel, setBatchLabel] = useState("");
   const [uploadSummary, setUploadSummary] = useState<{ completed: number; failed: number } | null>(null);
+  const [createdAlbumId, setCreatedAlbumId] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement | null>(null);
 
   function syncInputFiles(nextFiles: File[]) {
@@ -85,7 +92,7 @@ export function NewAlbumForm() {
 
     const incomingFiles = Array.from(fileList).filter((file) => file.type.startsWith("image/"));
     setQueuedFiles((current) => {
-      const nextFiles = [
+      const nextFiles = sortUploadQueueItems([
         ...current,
         ...incomingFiles.map((file) => ({
           id: window.crypto.randomUUID(),
@@ -93,7 +100,7 @@ export function NewAlbumForm() {
           status: "queued" as const,
           progress: 0
         }))
-      ];
+      ]);
       syncInputFiles(nextFiles.map((item) => item.file));
       return nextFiles;
     });
@@ -147,18 +154,25 @@ export function NewAlbumForm() {
     setUploadSummary(null);
 
     try {
-      const createResponse = await fetch("/api/admin/albums", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify(payload)
-      });
+      let targetAlbumId = createdAlbumId;
 
-      const createdAlbum = (await createResponse.json()) as { ok?: boolean; albumId?: string; error?: string };
+      if (!targetAlbumId) {
+        const createResponse = await fetch("/api/admin/albums", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify(payload)
+        });
 
-      if (!createResponse.ok || !createdAlbum.albumId) {
-        throw new Error(createdAlbum.error || "No se pudo crear el album.");
+        const createdAlbum = (await createResponse.json()) as { ok?: boolean; albumId?: string; error?: string };
+
+        if (!createResponse.ok || !createdAlbum.albumId) {
+          throw new Error(createdAlbum.error || "No se pudo crear el album.");
+        }
+
+        targetAlbumId = createdAlbum.albumId;
+        setCreatedAlbumId(createdAlbum.albumId);
       }
 
       if (queuedFiles.length > 0) {
@@ -166,7 +180,7 @@ export function NewAlbumForm() {
         setSubmitLabel("Subiendo fotos...");
 
         const result = await uploadPhotoBatches({
-          albumId: createdAlbum.albumId,
+          albumId: targetAlbumId,
           files: queuedFiles.map(({ id, file, sortOrder, status }) => ({ id, file, sortOrder, status })),
           onReservedSortOrders: (reservedSortOrders) => {
             setQueuedFiles((current) =>
@@ -212,7 +226,7 @@ export function NewAlbumForm() {
       setSubmitPhase("processing");
       setSubmitLabel(queuedFiles.length > 0 ? "Finalizando album..." : "Finalizando...");
       setProgress(100);
-      router.push(`/appfotos/admin/albums/${createdAlbum.albumId}${queuedFiles.length > 0 ? "?uploaded=1" : ""}`);
+      router.push(`/appfotos/admin/albums/${targetAlbumId}${queuedFiles.length > 0 ? "?uploaded=1" : ""}`);
       router.refresh();
     } catch (error) {
       setSubmitError(error instanceof Error ? error.message : "No se pudo completar el proceso.");

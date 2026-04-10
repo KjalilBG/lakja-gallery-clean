@@ -579,7 +579,11 @@ export function GalleryExperience({
       )}
 
       {resolvedActivePhoto ? (
-        <div className="fixed inset-0 z-50 bg-white">
+        <div
+          className="fixed inset-0 z-50 bg-white touch-pan-y"
+          onTouchStart={handleViewerTouchStart}
+          onTouchEnd={handleViewerTouchEnd}
+        >
           <div className="flex min-h-screen items-center justify-center px-3 py-3 sm:px-4 sm:py-6 lg:px-10">
             <button
               type="button"

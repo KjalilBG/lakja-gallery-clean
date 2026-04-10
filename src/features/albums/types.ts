@@ -94,6 +94,13 @@ export type AlbumDetail = {
   permissions: AlbumPermissionSet;
   photos: GalleryPhoto[];
   favoriteSelections?: FavoriteSelectionSummary[];
+  topDownloadedPhotos?: {
+    id: string;
+    title: string;
+    thumbUrl: string;
+    downloadCount: number;
+    lastDownloadedAt: string;
+  }[];
 };
 
 export type FavoriteSelectionSummary = {

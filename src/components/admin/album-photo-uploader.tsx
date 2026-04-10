@@ -4,7 +4,13 @@ import { useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { ImagePlus, LoaderCircle, UploadCloud, X } from "lucide-react";
 
-import { MAX_FILES_PER_REQUEST, type UploadQueueItem, type UploadQueuePhase, uploadPhotoBatches } from "@/components/admin/upload-photo-batches";
+import {
+  MAX_FILES_PER_REQUEST,
+  sortUploadQueueItems,
+  type UploadQueueItem,
+  type UploadQueuePhase,
+  uploadPhotoBatches
+} from "@/components/admin/upload-photo-batches";
 
 type AlbumPhotoUploaderProps = {
   albumId: string;
@@ -52,7 +58,7 @@ export function AlbumPhotoUploader({ albumId, existingFileNames = [] }: AlbumPho
     setQueuedFiles((current) => {
       const seenNames = new Set(current.map((item) => normalizeFileName(item.file.name)));
 
-      return [
+      return sortUploadQueueItems([
         ...current,
         ...incomingFiles.map((file) => {
           const normalizedName = normalizeFileName(file.name);
@@ -81,7 +87,7 @@ export function AlbumPhotoUploader({ albumId, existingFileNames = [] }: AlbumPho
             progress: 0
           };
         })
-      ];
+      ]);
     });
   }
 

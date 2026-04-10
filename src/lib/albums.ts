@@ -183,7 +183,7 @@ async function ensureUniqueSlug(base: string, excludeAlbumId?: string) {
 async function normalizeAlbumPhotoOrder(albumId: string) {
   const photos = await prisma.photo.findMany({
     where: { albumId },
-    orderBy: [{ capturedAt: "asc" }, { createdAt: "asc" }, { id: "asc" }],
+    orderBy: [{ sortOrder: "asc" }, { capturedAt: "asc" }, { createdAt: "asc" }, { id: "asc" }],
     select: {
       id: true,
       sortOrder: true
@@ -723,6 +723,19 @@ export async function getAdminAlbumById(id: string): Promise<AlbumDetail | null>
           }
       }
       ,
+      downloads: {
+        where: {
+          type: "SINGLE",
+          photoId: {
+            not: null
+          }
+        },
+        orderBy: { createdAt: "desc" },
+        select: {
+          photoId: true,
+          createdAt: true
+        }
+      },
       jobs: {
         where: { type: { in: [JobType.OCR_BIB, JobType.GENERATE_PREVIEW] } },
         orderBy: { updatedAt: "desc" },
@@ -751,6 +764,52 @@ export async function getAdminAlbumById(id: string): Promise<AlbumDetail | null>
   const retryablePhotosCount = album.photos.filter(
     (photo) => photo.status === PhotoStatus.FAILED || !photo.previewKey || !photo.thumbKey
   ).length;
+  const topDownloadedPhotos = Array.from(
+    album.downloads.reduce((map, download) => {
+      if (!download.photoId) {
+        return map;
+      }
+
+      const current = map.get(download.photoId);
+      if (current) {
+        current.downloadCount += 1;
+        if (download.createdAt > current.lastDownloadedAt) {
+          current.lastDownloadedAt = download.createdAt;
+        }
+        return map;
+      }
+
+      map.set(download.photoId, {
+        downloadCount: 1,
+        lastDownloadedAt: download.createdAt
+      });
+      return map;
+    }, new Map<string, { downloadCount: number; lastDownloadedAt: Date }>())
+  )
+    .map(([photoId, stats]) => {
+      const photo = album.photos.find((item) => item.id === photoId);
+
+      if (!photo) {
+        return null;
+      }
+
+      return {
+        id: photo.id,
+        title: buildPublicPhotoTitle(album.title, photo.sortOrder),
+        thumbUrl: photo.thumbKey ? toMediaRoute(photo.thumbKey) : buildPhotoUrl(photo),
+        downloadCount: stats.downloadCount,
+        lastDownloadedAt: stats.lastDownloadedAt.toISOString()
+      };
+    })
+    .filter((value): value is NonNullable<typeof value> => Boolean(value))
+    .sort((left, right) => {
+      if (right.downloadCount !== left.downloadCount) {
+        return right.downloadCount - left.downloadCount;
+      }
+
+      return right.lastDownloadedAt.localeCompare(left.lastDownloadedAt);
+    })
+    .slice(0, 8);
 
   return {
     id: album.id,
@@ -849,6 +908,7 @@ export async function getAdminAlbumById(id: string): Promise<AlbumDetail | null>
         serial: item.photo.sortOrder + 1
       }))
     })),
+    topDownloadedPhotos,
     photos: album.photos.map((photo) => ({
       id: photo.id,
       url: buildPhotoUrl(photo),
