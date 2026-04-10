@@ -1121,6 +1121,65 @@ export async function recordAlbumView(slug: string, sessionId: string) {
   });
 }
 
+export async function syncAlbumFavorites(input: {
+  slug: string;
+  sessionId: string;
+  photoIds: string[];
+}) {
+  const album = await prisma.album.findUnique({
+    where: { slug: input.slug },
+    select: {
+      id: true,
+      photos: {
+        where: {
+          id: {
+            in: input.photoIds
+          }
+        },
+        select: {
+          id: true
+        }
+      }
+    }
+  });
+
+  if (!album) {
+    return null;
+  }
+
+  const validPhotoIds = new Set(album.photos.map((photo) => photo.id));
+  const nextPhotoIds = input.photoIds.filter((photoId) => validPhotoIds.has(photoId));
+
+  await prisma.$transaction([
+    prisma.favorite.deleteMany({
+      where: {
+        albumId: album.id,
+        sessionId: input.sessionId,
+        photoId: {
+          notIn: nextPhotoIds.length > 0 ? nextPhotoIds : ["__none__"]
+        }
+      }
+    }),
+    ...(nextPhotoIds.length > 0
+      ? [
+          prisma.favorite.createMany({
+            data: nextPhotoIds.map((photoId) => ({
+              albumId: album.id,
+              photoId,
+              sessionId: input.sessionId
+            })),
+            skipDuplicates: true
+          })
+        ]
+      : [])
+  ]);
+
+  return {
+    albumId: album.id,
+    favoriteCount: nextPhotoIds.length
+  };
+}
+
 export async function recordAlbumDownload(input: {
   slug: string;
   sessionId: string;

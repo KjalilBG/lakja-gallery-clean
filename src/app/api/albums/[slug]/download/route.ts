@@ -29,7 +29,7 @@ export async function GET(request: NextRequest, context: RouteContext) {
     const album = await getDownloadableAlbumPhotos(slug);
 
     if (!album) {
-      return NextResponse.json({ error: "Album no encontrado." }, { status: 404 });
+      return NextResponse.json({ error: "Álbum no encontrado." }, { status: 404 });
     }
 
     const type = sanitizeTextInput(request.nextUrl.searchParams.get("type") ?? "");
@@ -53,7 +53,7 @@ export async function GET(request: NextRequest, context: RouteContext) {
 
     if (type === "all" && album.fullDownloadPasswordHash) {
       return NextResponse.json(
-        { error: "Esta descarga completa necesita una contrasena y debe iniciarse desde la galeria." },
+        { error: "Esta descarga completa necesita una contraseña y debe iniciarse desde la galería." },
         { status: 401 }
       );
     }
@@ -64,13 +64,13 @@ export async function GET(request: NextRequest, context: RouteContext) {
       }
 
       if (!photoId) {
-        return NextResponse.json({ error: "No se encontro la foto solicitada." }, { status: 400 });
+        return NextResponse.json({ error: "No se encontró la foto solicitada." }, { status: 400 });
       }
 
       const photo = album.photos.find((item) => item.id === photoId);
 
       if (!photo) {
-        return NextResponse.json({ error: "No se encontro la foto solicitada." }, { status: 404 });
+        return NextResponse.json({ error: "No se encontró la foto solicitada." }, { status: 404 });
       }
       const extension = path.extname(photo.filename) || ".jpg";
       const downloadName = buildBrandedPhotoFileName(`${photo.sortOrder + 1} - ${album.title}`, extension);
@@ -128,7 +128,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
     const album = await getDownloadableAlbumPhotos(slug);
 
     if (!album) {
-      return NextResponse.json({ error: "Album no encontrado." }, { status: 404 });
+      return NextResponse.json({ error: "Álbum no encontrado." }, { status: 404 });
     }
 
     const body = sanitizeJsonValue(await request.json()) as Record<string, unknown>;
@@ -149,11 +149,11 @@ export async function POST(request: NextRequest, context: RouteContext) {
 
     if (album.fullDownloadPasswordHash) {
       if (!downloadPassword) {
-        return NextResponse.json({ error: "Escribe la contrasena para descargar el album completo." }, { status: 401 });
+        return NextResponse.json({ error: "Escribe la contraseña para descargar el álbum completo." }, { status: 401 });
       }
 
       if (!verifyPassword(downloadPassword, album.fullDownloadPasswordHash)) {
-        return NextResponse.json({ error: "La contrasena de descarga no es correcta." }, { status: 403 });
+        return NextResponse.json({ error: "La contraseña de descarga no es correcta." }, { status: 403 });
       }
     }
 

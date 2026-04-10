@@ -66,6 +66,7 @@ export function GalleryExperience({
   const [fullDownloadPassword, setFullDownloadPassword] = useState("");
   const [fullDownloadError, setFullDownloadError] = useState("");
   const [isPreparingFullDownload, setIsPreparingFullDownload] = useState(false);
+  const [favoritesHydrated, setFavoritesHydrated] = useState(false);
   const [showSendFavorites, setShowSendFavorites] = useState(false);
   const [bibQuery, setBibQuery] = useState("");
   const [senderName, setSenderName] = useState("");
@@ -76,7 +77,6 @@ export function GalleryExperience({
   const [origin, setOrigin] = useState("");
   const touchStartX = useRef<number | null>(null);
   const touchStartY = useRef<number | null>(null);
-
   useEffect(() => {
     try {
       const rawValue = window.localStorage.getItem(storageKey);
@@ -89,6 +89,8 @@ export function GalleryExperience({
     } catch {
       // Ignore malformed local storage data.
     }
+
+    setFavoritesHydrated(true);
   }, [storageKey]);
 
   const senderStorageKey = `${storageKey}-sender`;
@@ -301,6 +303,30 @@ export function GalleryExperience({
       })
       .catch(() => undefined);
   }, [slug, storageKey]);
+
+  useEffect(() => {
+    if (!favoritesHydrated) {
+      return;
+    }
+
+    const sessionId = getSessionId();
+    const timeoutId = window.setTimeout(() => {
+      void fetch(`/api/albums/${slug}/favorite-sync`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          sessionId,
+          photoIds: favoriteIds
+        })
+      }).catch(() => undefined);
+    }, 350);
+
+    return () => {
+      window.clearTimeout(timeoutId);
+    };
+  }, [favoriteIds, favoritesHydrated, slug]);
 
   async function submitFavorites() {
     if (favoriteIds.length === 0 || isSendingFavorites) return;
@@ -709,9 +735,9 @@ export function GalleryExperience({
               <div className="flex items-start justify-between gap-4">
                 <div>
                   <p className="text-[11px] font-extrabold uppercase tracking-[0.24em] text-slate-400">Descarga completa</p>
-                  <h3 className="mt-2 text-3xl font-black tracking-tight text-slate-900">Protegida con contrasena</h3>
+                  <h3 className="mt-2 text-3xl font-black tracking-tight text-slate-900">Protegida con contraseña</h3>
                   <p className="mt-3 text-sm leading-7 text-slate-500">
-                    Solo la duena del album tiene esta clave. Si la escribes bien, la descarga arrancara y te dejaremos aqui mismo el popup con branding.
+                    Ingresa la contraseña que te fue proporcionada para descargar el álbum completo.
                   </p>
                 </div>
                 <button
@@ -731,13 +757,13 @@ export function GalleryExperience({
 
               <div className="mt-6 grid gap-4">
                 <label className="space-y-2">
-                  <span className="text-sm font-bold text-slate-500">Contrasena del ZIP completo</span>
+                  <span className="text-sm font-bold text-slate-500">Contraseña del ZIP completo</span>
                   <input
                     value={fullDownloadPassword}
                     onChange={(event) => setFullDownloadPassword(event.target.value)}
                     type="password"
                     className="w-full rounded-[18px] border border-slate-200 bg-slate-50 px-4 py-3 outline-none transition focus:border-lime-400 focus:bg-white"
-                    placeholder="Escribe la contrasena"
+                    placeholder="Escribe la contraseña"
                   />
                 </label>
               </div>
