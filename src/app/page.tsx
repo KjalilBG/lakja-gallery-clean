@@ -10,7 +10,8 @@ import { getSiteSettings } from "@/lib/site-settings";
 export const revalidate = 300;
 
 export default async function HomePage() {
-  const [settings, showcasePhotos] = await Promise.all([getSiteSettings(), getPublishedShowcasePhotos(12)]);
+  const settings = await getSiteSettings();
+  const showcasePhotos = await getPublishedShowcasePhotos(12, settings.featuredAlbumIds);
   const featuredPhotos = showcasePhotos
     .filter((photo, index, photos) => photos.findIndex((candidate) => candidate.slug === photo.slug) === index)
     .slice(0, 5);

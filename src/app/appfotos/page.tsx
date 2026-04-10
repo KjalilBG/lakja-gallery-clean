@@ -12,8 +12,8 @@ export const revalidate = 60;
 export default async function AppFotosPage() {
   const settings = await getSiteSettings();
   const [albums, showcasePhotos] = await Promise.all([
-    getHomepageAlbums(6, settings.featuredAlbumIds),
-    getPublishedShowcasePhotos(10)
+    getHomepageAlbums(6),
+    getPublishedShowcasePhotos(10, settings.featuredAlbumIds)
   ]);
 
   if (settings.maintenanceMode) {

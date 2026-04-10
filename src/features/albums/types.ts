@@ -111,6 +111,34 @@ export type AlbumDetail = {
     submittedFavoriteCount: number;
     lastDownloadedAt: string | null;
   }[];
+  downloadBreakdown?: {
+    single: number;
+    favoritesZip: number;
+    fullZip: number;
+  };
+  photoFavoriteInsights?: {
+    id: string;
+    title: string;
+    thumbUrl: string;
+    favoriteCount: number;
+    submittedFavoriteCount: number;
+    lastFavoriteAt: string | null;
+  }[];
+  downloadSessions?: {
+    sessionId: string;
+    firstDownloadAt: string;
+    lastDownloadAt: string;
+    singleCount: number;
+    favoritesZipCount: number;
+    fullZipCount: number;
+    photos: {
+      id: string;
+      title: string;
+      thumbUrl: string;
+      count: number;
+      lastDownloadedAt: string;
+    }[];
+  }[];
 };
 
 export type FavoriteSelectionSummary = {

@@ -200,7 +200,12 @@ export default async function AlbumDetailPage({ params, searchParams }: AlbumDet
             <p className="text-[11px] font-extrabold uppercase tracking-[0.24em]">Descargas</p>
           </div>
           <p className="mt-3 text-3xl font-black text-slate-950">{album.downloads}</p>
-          <p className="mt-2 text-sm text-slate-500">Incluye descargas individuales y ZIP del album.</p>
+          <p className="mt-2 text-sm text-slate-500">Separadas por individuales, ZIP de favoritas y ZIP completo.</p>
+          {album.downloadBreakdown ? (
+            <p className="mt-2 text-xs font-bold text-slate-500">
+              Individual: {album.downloadBreakdown.single} · Favoritas ZIP: {album.downloadBreakdown.favoritesZip} · Completo ZIP: {album.downloadBreakdown.fullZip}
+            </p>
+          ) : null}
         </div>
         <div className="rounded-[28px] border border-slate-200 bg-white px-5 py-5 shadow-[0_12px_30px_rgba(15,23,42,0.05)]">
           <div className="flex items-center gap-3 text-slate-400">
@@ -465,6 +470,77 @@ export default async function AlbumDetailPage({ params, searchParams }: AlbumDet
                   </div>
                 </details>
               ) : null}
+            </div>
+          ) : null}
+
+          {album.photoFavoriteInsights && album.photoFavoriteInsights.length > 0 ? (
+            <div className="rounded-[30px] border border-slate-200 bg-white p-6 shadow-[0_12px_30px_rgba(15,23,42,0.05)]">
+              <div className="flex items-center gap-3">
+                <Heart className="size-5 text-fuchsia-500" />
+                <p className="font-black uppercase tracking-[0.18em] text-slate-900">Top favoritas</p>
+              </div>
+              <p className="mt-4 text-sm leading-7 text-slate-500">
+                Ranking de fotos que mas marcaron como favoritas (aunque no las descarguen).
+              </p>
+              <div className="mt-4 space-y-3">
+                {album.photoFavoriteInsights.slice(0, 12).map((photo) => (
+                  <div key={photo.id} className="flex items-center gap-3 rounded-[18px] border border-slate-200 bg-slate-50 px-3 py-3">
+                    <img src={photo.thumbUrl} alt={photo.title} className="h-12 w-12 rounded-[12px] object-cover" />
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-sm font-bold text-slate-900">{photo.title}</p>
+                      <p className="mt-1 text-xs font-medium text-slate-500">
+                        {photo.favoriteCount} favorita(s) marcadas · {photo.submittedFavoriteCount} en listas enviadas
+                      </p>
+                      {photo.lastFavoriteAt ? (
+                        <p className="mt-1 text-[11px] font-bold uppercase tracking-[0.12em] text-slate-400">
+                          Ultima favorita {formatDate(photo.lastFavoriteAt)}
+                        </p>
+                      ) : null}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ) : null}
+
+          {album.downloadSessions && album.downloadSessions.length > 0 ? (
+            <div className="rounded-[30px] border border-slate-200 bg-white p-6 shadow-[0_12px_30px_rgba(15,23,42,0.05)]">
+              <div className="flex items-center gap-3">
+                <Download className="size-5 text-slate-500" />
+                <p className="font-black uppercase tracking-[0.18em] text-slate-900">Descargas por usuario</p>
+              </div>
+              <p className="mt-4 text-sm leading-7 text-slate-500">
+                Cada fila representa una sesion (usuario anonimo) y las fotos que descargo.
+              </p>
+              <div className="mt-4 space-y-3">
+                {album.downloadSessions.slice(0, 10).map((session) => (
+                  <details key={session.sessionId} className="rounded-[18px] border border-slate-200 bg-slate-50 px-4 py-3">
+                    <summary className="cursor-pointer text-sm font-bold text-slate-900">
+                      Sesion {session.sessionId.slice(0, 8)}… · indiv {session.singleCount} · fav ZIP {session.favoritesZipCount} · full ZIP {session.fullZipCount}
+                    </summary>
+                    <p className="mt-2 text-[11px] font-bold uppercase tracking-[0.12em] text-slate-400">
+                      Primera {formatDate(session.firstDownloadAt)} · Ultima {formatDate(session.lastDownloadAt)}
+                    </p>
+                    <div className="mt-3 max-h-[260px] space-y-2 overflow-y-auto pr-1">
+                      {session.photos.length > 0 ? (
+                        session.photos.map((photo) => (
+                          <div key={photo.id} className="flex items-center gap-3 rounded-[14px] border border-slate-200 bg-white px-3 py-2">
+                            <img src={photo.thumbUrl} alt={photo.title} className="h-10 w-10 rounded-[10px] object-cover" />
+                            <div className="min-w-0 flex-1">
+                              <p className="truncate text-xs font-bold text-slate-900">{photo.title}</p>
+                              <p className="mt-0.5 text-[11px] font-medium text-slate-500">
+                                {photo.count} descarga(s) · ultima {formatDate(photo.lastDownloadedAt)}
+                              </p>
+                            </div>
+                          </div>
+                        ))
+                      ) : (
+                        <p className="text-xs font-medium text-slate-500">En esta sesion no hubo descargas individuales (solo ZIP).</p>
+                      )}
+                    </div>
+                  </details>
+                ))}
+              </div>
             </div>
           ) : null}
 

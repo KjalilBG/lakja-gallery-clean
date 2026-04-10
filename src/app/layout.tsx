@@ -16,6 +16,11 @@ export async function generateMetadata(): Promise<Metadata> {
 
   return {
     metadataBase: new URL(resolveAppUrl()),
+    icons: {
+      icon: [{ url: "/favicon.svg", type: "image/svg+xml" }],
+      shortcut: ["/favicon.svg"],
+      apple: ["/favicon.svg"]
+    },
     title: settings.shareTitle,
     description: settings.shareDescription,
     openGraph: {

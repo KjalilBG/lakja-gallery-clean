@@ -174,20 +174,34 @@ export function GalleryExperience({
 
     function onKeyDown(event: KeyboardEvent) {
       if (event.key === "Escape") {
+        event.preventDefault();
         setActiveIndex(null);
+        updatePhotoParam(null);
       }
 
       if (event.key === "ArrowLeft") {
+        event.preventDefault();
         setActiveIndex((current) => {
           if (current === null) return current;
-          return current === 0 ? visiblePhotos.length - 1 : current - 1;
+          const next = current === 0 ? visiblePhotos.length - 1 : current - 1;
+          const nextPhoto = visiblePhotos[next];
+          if (nextPhoto) {
+            updatePhotoParam(nextPhoto.id);
+          }
+          return next;
         });
       }
 
       if (event.key === "ArrowRight") {
+        event.preventDefault();
         setActiveIndex((current) => {
           if (current === null) return current;
-          return current === visiblePhotos.length - 1 ? 0 : current + 1;
+          const next = current === visiblePhotos.length - 1 ? 0 : current + 1;
+          const nextPhoto = visiblePhotos[next];
+          if (nextPhoto) {
+            updatePhotoParam(nextPhoto.id);
+          }
+          return next;
         });
       }
     }
@@ -202,6 +216,7 @@ export function GalleryExperience({
   }, [activeIndex, visiblePhotos.length]);
 
   function goPrevious() {
+    if (visiblePhotos.length === 0) return;
     setActiveIndex((current) => {
       const nextIndex = current === null ? 0 : current === 0 ? visiblePhotos.length - 1 : current - 1;
       const nextPhoto = visiblePhotos[nextIndex];
@@ -213,6 +228,7 @@ export function GalleryExperience({
   }
 
   function goNext() {
+    if (visiblePhotos.length === 0) return;
     setActiveIndex((current) => {
       const nextIndex = current === null ? 0 : current === visiblePhotos.length - 1 ? 0 : current + 1;
       const nextPhoto = visiblePhotos[nextIndex];
@@ -492,7 +508,7 @@ export function GalleryExperience({
   const canShowSingleDownload = downloadsEnabled && allowSingleDownload;
 
   function updatePhotoParam(photoId: string | null) {
-    const params = new URLSearchParams(window.location.search);
+    const params = new URLSearchParams(searchParams.toString());
 
     if (photoId) {
       params.set("photo", photoId);
@@ -513,6 +529,7 @@ export function GalleryExperience({
   }
 
   function closePhotoViewer() {
+    setActiveIndex(null);
     updatePhotoParam(null);
   }
 

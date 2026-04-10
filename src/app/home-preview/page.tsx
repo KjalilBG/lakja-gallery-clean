@@ -22,8 +22,8 @@ export const metadata: Metadata = {
 export default async function HomePreviewPage() {
   const settings = await getSiteSettings();
   const [albums, showcasePhotos] = await Promise.all([
-    getHomepageAlbums(3, settings.featuredAlbumIds),
-    getPublishedShowcasePhotos(6)
+    getHomepageAlbums(3),
+    getPublishedShowcasePhotos(6, settings.featuredAlbumIds)
   ]);
 
   const heroMain = showcasePhotos[0]?.imageUrl ?? albums[0]?.coverUrl ?? "";

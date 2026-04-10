@@ -484,62 +484,11 @@ export async function getPublishedAlbums(limit = 6): Promise<AlbumSummary[]> {
   }));
 }
 
-export async function getHomepageAlbums(limit = 6, featuredAlbumIds: string[] = []): Promise<AlbumSummary[]> {
-  const featuredIds = Array.from(new Set(featuredAlbumIds.filter(Boolean)));
-
-  if (featuredIds.length === 0) {
-    return getPublishedAlbums(limit);
-  }
-
-  const albums = await prisma.album.findMany({
-    where: { status: AlbumStatus.PUBLISHED },
-    orderBy: [{ eventDate: "desc" }, { createdAt: "desc" }],
-    include: {
-      coverPhoto: true,
-      _count: {
-        select: {
-          photos: true,
-          favoriteSelections: true,
-          downloads: true,
-          views: true
-        }
-      }
-    }
-  });
-
-  const mappedAlbums = albums.map((album) => ({
-    id: album.id,
-    slug: album.slug,
-    title: album.title,
-    clientName: album.clientName,
-    coverUrl: album.coverPhoto ? buildPhotoUrl(album.coverPhoto) : defaultCoverUrl(),
-    coverPosition: mapCoverPosition(album.coverPosition),
-    coverFocusX: album.coverFocusX,
-    coverFocusY: album.coverFocusY,
-    status: mapStatus(album.status),
-    photoCount: album._count.photos,
-    favorites: album._count.favoriteSelections,
-    downloads: album._count.downloads,
-    views: album._count.views,
-    eventDate: album.eventDate ? album.eventDate.toISOString() : album.createdAt.toISOString(),
-    permissions: {
-      allowSingleDownload: album.allowSingleDownload,
-      allowFavoritesDownload: album.allowFavoritesDownload,
-      allowFullDownload: album.allowFullDownload,
-      hasFullDownloadPassword: Boolean(album.fullDownloadPasswordHash)
-    }
-  }));
-
-  const featuredAlbums = featuredIds
-    .map((featuredId) => mappedAlbums.find((album) => album.id === featuredId))
-    .filter((album): album is AlbumSummary => Boolean(album));
-
-  const remainingAlbums = mappedAlbums.filter((album) => !featuredIds.includes(album.id));
-
-  return [...featuredAlbums, ...remainingAlbums].slice(0, limit);
+export async function getHomepageAlbums(limit = 6): Promise<AlbumSummary[]> {
+  return getPublishedAlbums(limit);
 }
 
-export async function getPublishedShowcasePhotos(limit = 10) {
+export async function getPublishedShowcasePhotos(limit = 10, featuredAlbumIds: string[] = []) {
   const albums = await prisma.album.findMany({
     where: { status: AlbumStatus.PUBLISHED },
     orderBy: [{ eventDate: "desc" }, { createdAt: "desc" }],
@@ -567,6 +516,7 @@ export async function getPublishedShowcasePhotos(limit = 10) {
   const items = albums.flatMap((album) =>
     album.photos.map((photo) => ({
       id: photo.id,
+      albumId: album.id,
       slug: album.slug,
       albumTitle: album.title,
       title: buildPublicPhotoTitle(album.title, photo.sortOrder),
@@ -575,10 +525,28 @@ export async function getPublishedShowcasePhotos(limit = 10) {
     }))
   );
 
+  const featuredIds = Array.from(new Set(featuredAlbumIds.filter(Boolean)));
   const shuffled = items
-    .map((item) => ({ item, weight: Math.random() }))
-    .sort((left, right) => left.weight - right.weight)
-    .map(({ item }) => item);
+    .map((item) => ({
+      item,
+      weight: Math.random(),
+      featuredWeight: featuredIds.includes(item.albumId) ? 0 : 1
+    }))
+    .sort((left, right) => {
+      if (left.featuredWeight !== right.featuredWeight) {
+        return left.featuredWeight - right.featuredWeight;
+      }
+
+      return left.weight - right.weight;
+    })
+    .map(({ item }) => ({
+      id: item.id,
+      slug: item.slug,
+      albumTitle: item.albumTitle,
+      title: item.title,
+      imageUrl: item.imageUrl,
+      thumbUrl: item.thumbUrl
+    }));
 
   return shuffled.slice(0, limit);
 }
@@ -724,15 +692,11 @@ export async function getAdminAlbumById(id: string): Promise<AlbumDetail | null>
       }
       ,
       downloads: {
-        where: {
-          type: "SINGLE",
-          photoId: {
-            not: null
-          }
-        },
         orderBy: { createdAt: "desc" },
         select: {
           photoId: true,
+          type: true,
+          sessionId: true,
           createdAt: true
         }
       },
@@ -771,7 +735,12 @@ export async function getAdminAlbumById(id: string): Promise<AlbumDetail | null>
   const retryablePhotosCount = album.photos.filter(
     (photo) => photo.status === PhotoStatus.FAILED || !photo.previewKey || !photo.thumbKey
   ).length;
-  const downloadStatsByPhotoId = album.downloads.reduce((map, download) => {
+  const photoById = new Map(album.photos.map((photo) => [photo.id, photo]));
+  const singleDownloads = album.downloads.filter((download) => download.type === "SINGLE" && Boolean(download.photoId));
+  const fullZipDownloads = album.downloads.filter((download) => download.type === "FULL_ZIP");
+  const favoritesZipDownloads = album.downloads.filter((download) => download.type === "FAVORITES_ZIP");
+
+  const downloadStatsByPhotoId = singleDownloads.reduce((map, download) => {
     if (!download.photoId) {
       return map;
     }
@@ -794,7 +763,7 @@ export async function getAdminAlbumById(id: string): Promise<AlbumDetail | null>
 
   const topDownloadedPhotos = Array.from(downloadStatsByPhotoId)
     .map(([photoId, stats]) => {
-      const photo = album.photos.find((item) => item.id === photoId);
+      const photo = photoById.get(photoId);
 
       if (!photo) {
         return null;
@@ -819,10 +788,18 @@ export async function getAdminAlbumById(id: string): Promise<AlbumDetail | null>
     .slice(0, 8);
 
   const favoriteCountByPhotoId = album.favorites.reduce((map, favorite) => {
-    const current = map.get(favorite.photoId) ?? 0;
-    map.set(favorite.photoId, current + 1);
+    const current = map.get(favorite.photoId);
+    if (current) {
+      current.count += 1;
+      if (favorite.createdAt > current.lastFavoriteAt) {
+        current.lastFavoriteAt = favorite.createdAt;
+      }
+      return map;
+    }
+
+    map.set(favorite.photoId, { count: 1, lastFavoriteAt: favorite.createdAt });
     return map;
-  }, new Map<string, number>());
+  }, new Map<string, { count: number; lastFavoriteAt: Date }>());
 
   const submittedFavoriteCountByPhotoId = album.favoriteSelections.reduce((map, selection) => {
     for (const item of selection.items) {
@@ -836,7 +813,8 @@ export async function getAdminAlbumById(id: string): Promise<AlbumDetail | null>
   const photoDeliveryInsights = album.photos
     .map((photo) => {
       const aggregatedDownloadStats = downloadStatsByPhotoId.get(photo.id);
-      const favoriteCount = favoriteCountByPhotoId.get(photo.id) ?? 0;
+      const favoriteStats = favoriteCountByPhotoId.get(photo.id);
+      const favoriteCount = favoriteStats?.count ?? 0;
       const submittedFavoriteCount = submittedFavoriteCountByPhotoId.get(photo.id) ?? 0;
       const downloadCount = aggregatedDownloadStats?.downloadCount ?? 0;
 
@@ -880,6 +858,147 @@ export async function getAdminAlbumById(id: string): Promise<AlbumDetail | null>
       return left.sortOrder - right.sortOrder;
     })
     .map(({ sortOrder: _sortOrder, ...insight }) => insight);
+
+  const photoFavoriteInsights = album.photos
+    .map((photo) => {
+      const favoriteStats = favoriteCountByPhotoId.get(photo.id);
+      const submittedFavoriteCount = submittedFavoriteCountByPhotoId.get(photo.id) ?? 0;
+      const favoriteCount = favoriteStats?.count ?? 0;
+
+      if (favoriteCount === 0 && submittedFavoriteCount === 0) {
+        return null;
+      }
+
+      return {
+        id: photo.id,
+        title: buildPublicPhotoTitle(album.title, photo.sortOrder),
+        thumbUrl: photo.thumbKey ? toMediaRoute(photo.thumbKey) : buildPhotoUrl(photo),
+        favoriteCount,
+        submittedFavoriteCount,
+        lastFavoriteAt: favoriteStats?.lastFavoriteAt.toISOString() ?? null,
+        sortOrder: photo.sortOrder
+      };
+    })
+    .filter((value): value is NonNullable<typeof value> => Boolean(value))
+    .sort((left, right) => {
+      if (right.favoriteCount !== left.favoriteCount) {
+        return right.favoriteCount - left.favoriteCount;
+      }
+
+      if (right.submittedFavoriteCount !== left.submittedFavoriteCount) {
+        return right.submittedFavoriteCount - left.submittedFavoriteCount;
+      }
+
+      if (left.lastFavoriteAt && right.lastFavoriteAt && left.lastFavoriteAt !== right.lastFavoriteAt) {
+        return right.lastFavoriteAt.localeCompare(left.lastFavoriteAt);
+      }
+
+      if (left.lastFavoriteAt !== right.lastFavoriteAt) {
+        return left.lastFavoriteAt ? -1 : 1;
+      }
+
+      return left.sortOrder - right.sortOrder;
+    })
+    .map(({ sortOrder: _sortOrder, ...insight }) => insight);
+
+  const downloadSessionMap = album.downloads.reduce(
+    (map, download) => {
+      const current = map.get(download.sessionId) ?? {
+        sessionId: download.sessionId,
+        firstDownloadAt: download.createdAt,
+        lastDownloadAt: download.createdAt,
+        singleCount: 0,
+        favoritesZipCount: 0,
+        fullZipCount: 0,
+        photoMap: new Map<string, { count: number; lastDownloadedAt: Date }>()
+      };
+
+      if (download.createdAt < current.firstDownloadAt) {
+        current.firstDownloadAt = download.createdAt;
+      }
+      if (download.createdAt > current.lastDownloadAt) {
+        current.lastDownloadAt = download.createdAt;
+      }
+
+      if (download.type === "SINGLE") {
+        current.singleCount += 1;
+      } else if (download.type === "FAVORITES_ZIP") {
+        current.favoritesZipCount += 1;
+      } else if (download.type === "FULL_ZIP") {
+        current.fullZipCount += 1;
+      }
+
+      if (download.type === "SINGLE" && download.photoId) {
+        const currentPhoto = current.photoMap.get(download.photoId);
+        if (currentPhoto) {
+          currentPhoto.count += 1;
+          if (download.createdAt > currentPhoto.lastDownloadedAt) {
+            currentPhoto.lastDownloadedAt = download.createdAt;
+          }
+        } else {
+          current.photoMap.set(download.photoId, {
+            count: 1,
+            lastDownloadedAt: download.createdAt
+          });
+        }
+      }
+
+      map.set(download.sessionId, current);
+      return map;
+    },
+    new Map<
+      string,
+      {
+        sessionId: string;
+        firstDownloadAt: Date;
+        lastDownloadAt: Date;
+        singleCount: number;
+        favoritesZipCount: number;
+        fullZipCount: number;
+        photoMap: Map<string, { count: number; lastDownloadedAt: Date }>;
+      }
+    >()
+  );
+
+  const downloadSessions = Array.from(downloadSessionMap.values())
+    .map((session) => ({
+      sessionId: session.sessionId,
+      firstDownloadAt: session.firstDownloadAt.toISOString(),
+      lastDownloadAt: session.lastDownloadAt.toISOString(),
+      singleCount: session.singleCount,
+      favoritesZipCount: session.favoritesZipCount,
+      fullZipCount: session.fullZipCount,
+      photos: Array.from(session.photoMap.entries())
+        .map(([photoId, stats]) => {
+          const photo = photoById.get(photoId);
+          if (!photo) {
+            return null;
+          }
+
+          return {
+            id: photo.id,
+            title: buildPublicPhotoTitle(album.title, photo.sortOrder),
+            thumbUrl: photo.thumbKey ? toMediaRoute(photo.thumbKey) : buildPhotoUrl(photo),
+            count: stats.count,
+            lastDownloadedAt: stats.lastDownloadedAt.toISOString(),
+            sortOrder: photo.sortOrder
+          };
+        })
+        .filter((value): value is NonNullable<typeof value> => Boolean(value))
+        .sort((left, right) => {
+          if (right.count !== left.count) {
+            return right.count - left.count;
+          }
+          if (right.lastDownloadedAt !== left.lastDownloadedAt) {
+            return right.lastDownloadedAt.localeCompare(left.lastDownloadedAt);
+          }
+          return left.sortOrder - right.sortOrder;
+        })
+        .slice(0, 12)
+        .map(({ sortOrder: _sortOrder, ...photo }) => photo)
+    }))
+    .sort((left, right) => right.lastDownloadAt.localeCompare(left.lastDownloadAt))
+    .slice(0, 40);
 
   return {
     id: album.id,
@@ -980,6 +1099,13 @@ export async function getAdminAlbumById(id: string): Promise<AlbumDetail | null>
     })),
     topDownloadedPhotos,
     photoDeliveryInsights,
+    photoFavoriteInsights,
+    downloadBreakdown: {
+      single: singleDownloads.length,
+      favoritesZip: favoritesZipDownloads.length,
+      fullZip: fullZipDownloads.length
+    },
+    downloadSessions,
     photos: album.photos.map((photo) => ({
       id: photo.id,
       url: buildPhotoUrl(photo),
@@ -2622,7 +2748,11 @@ export async function getOrCreateAlbumDownloadArchive(input: {
       zip.file(albumBasedName, fileBuffer.body);
     }
 
-    const zipBuffer = await zip.generateAsync({ type: "nodebuffer" });
+    const zipBuffer = await zip.generateAsync({
+      type: "nodebuffer",
+      compression: "STORE",
+      streamFiles: true
+    });
 
     await uploadToR2({
       bucket: "originals",
