@@ -1,6 +1,5 @@
-"use client";
-
 import Link from "next/link";
+import { getPublishedShowcasePhotos } from "@/lib/albums";
 
 const VARIANTS = [
   "Ups, esta ruta se fue a sesion de fotos sin avisar.",
@@ -15,7 +14,7 @@ const VARIANTS = [
   "No existe esta pagina, pero si muchas galerias lindas."
 ];
 
-const IMAGE_VARIANTS = [
+const FALLBACK_IMAGES = [
   "https://images.unsplash.com/photo-1511285560929-80b456fea0bc?auto=format&fit=crop&w=1400&q=80",
   "https://images.unsplash.com/photo-1522673607200-164d1b6ce486?auto=format&fit=crop&w=1400&q=80",
   "https://images.unsplash.com/photo-1520854221256-17451cc331bf?auto=format&fit=crop&w=1400&q=80",
@@ -28,9 +27,12 @@ const IMAGE_VARIANTS = [
   "https://images.unsplash.com/photo-1519741497674-611481863552?auto=format&fit=crop&w=1400&q=80"
 ];
 
-export default function NotFound() {
+export default async function NotFound() {
   const message = VARIANTS[Math.floor(Math.random() * VARIANTS.length)] ?? VARIANTS[0];
-  const image = IMAGE_VARIANTS[Math.floor(Math.random() * IMAGE_VARIANTS.length)] ?? IMAGE_VARIANTS[0];
+  const showcasePhotos = await getPublishedShowcasePhotos(16);
+  const galleryImages = showcasePhotos.map((photo) => photo.imageUrl).filter(Boolean);
+  const sourceImages = galleryImages.length > 0 ? galleryImages : FALLBACK_IMAGES;
+  const image = sourceImages[Math.floor(Math.random() * sourceImages.length)] ?? FALLBACK_IMAGES[0];
 
   return (
     <div className="mx-auto flex min-h-[65vh] w-full max-w-2xl items-center justify-center px-4 py-12">
