@@ -18,7 +18,10 @@ export default async function NotFound() {
   noStore();
 
   const showcasePhotos = await getPublishedShowcasePhotos(24);
-  const galleryImages = showcasePhotos.map((photo) => photo.imageUrl).filter(Boolean);
+  const galleryImages = showcasePhotos
+    .filter((photo) => photo.aspect === "landscape")
+    .map((photo) => photo.imageUrl)
+    .filter(Boolean);
   const images = galleryImages.length > 0 ? galleryImages : FALLBACK_IMAGES;
 
   return <RandomNotFoundState images={images} />;

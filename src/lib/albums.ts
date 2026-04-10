@@ -506,6 +506,8 @@ export async function getPublishedShowcasePhotos(limit = 10, featuredAlbumIds: s
           originalKey: true,
           previewKey: true,
           thumbKey: true,
+          width: true,
+          height: true,
           filename: true,
           sortOrder: true
         }
@@ -520,6 +522,14 @@ export async function getPublishedShowcasePhotos(limit = 10, featuredAlbumIds: s
       slug: album.slug,
       albumTitle: album.title,
       title: buildPublicPhotoTitle(album.title, photo.sortOrder),
+      aspect:
+        typeof photo.width === "number" && typeof photo.height === "number"
+          ? photo.width > photo.height
+            ? "landscape"
+            : photo.width < photo.height
+              ? "portrait"
+              : "square"
+          : detectAspect(photo.filename),
       imageUrl: photo.previewKey ? toMediaRoute(photo.previewKey) : buildPhotoUrl(photo),
       thumbUrl: photo.thumbKey ? toMediaRoute(photo.thumbKey) : buildPhotoUrl(photo)
     }))
@@ -544,6 +554,7 @@ export async function getPublishedShowcasePhotos(limit = 10, featuredAlbumIds: s
       slug: item.slug,
       albumTitle: item.albumTitle,
       title: item.title,
+      aspect: item.aspect,
       imageUrl: item.imageUrl,
       thumbUrl: item.thumbUrl
     }));

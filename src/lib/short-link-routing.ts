@@ -10,18 +10,19 @@ import {
 
 export async function handleShortLinkRedirect(request: Request, rawSlug: string) {
   const slug = normalizeShortLinkSlug(rawSlug);
+  const requestUrl = new URL(request.url);
+  const notFoundUrl = new URL("/404", requestUrl);
 
   if (!slug || isReservedShortLinkSlug(slug)) {
-    return new NextResponse("Not Found", { status: 404 });
+    return NextResponse.redirect(notFoundUrl, 307);
   }
 
   const shortLink = await findShortLinkBySlug(slug);
 
   if (!shortLink || !shortLink.isActive) {
-    return new NextResponse("Not Found", { status: 404 });
+    return NextResponse.redirect(notFoundUrl, 307);
   }
 
-  const requestUrl = new URL(request.url);
   const destinationUrl = mergeDestinationWithSearchParams(shortLink.destinationUrl, requestUrl);
   const referer = request.headers.get("referer");
   const sourceHost = (() => {
