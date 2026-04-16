@@ -14,5 +14,8 @@ declare module "next-auth/jwt" {
   interface JWT {
     role?: string;
     isSuperAdmin?: boolean;
+    email?: string | null;
+    name?: string | null;
+    picture?: string | null;
   }
 }

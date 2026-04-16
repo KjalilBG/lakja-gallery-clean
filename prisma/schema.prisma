@@ -75,6 +75,47 @@ enum PaymentType {
   MIXED
 }
 
+enum FinanceOwner {
+  LAKJA
+  KJALIL
+  KK
+}
+
+enum FinanceTransactionType {
+  INCOME
+  EXPENSE
+  SPECIAL
+  HONORARIOS_KJALIL
+  HONORARIOS_TERCEROS
+}
+
+enum FinanceTransactionStatus {
+  CONFIRMED
+  NEEDS_REVIEW
+}
+
+enum FinanceSpecialType {
+  PRESTAMO_DADO
+  PRESTAMO_RECUPERADO
+  REEMBOLSO
+  TRANSFERENCIA
+  AJUSTE
+  OTRO
+}
+
+enum FinanceSourceChannel {
+  TELEGRAM
+  DASHBOARD
+  IMPORT
+  SYSTEM
+}
+
+enum FinanceCategoryDirection {
+  INCOME
+  EXPENSE
+  SPECIAL
+}
+
 enum HistoryAction {
   CREATED
   UPDATED
@@ -92,6 +133,7 @@ model User {
   emailVerified DateTime?
   role          UserRole  @default(ADMIN)
   isActive      Boolean   @default(true)
+  staffAccessCodeHash String?
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
   accounts      Account[]
@@ -408,6 +450,9 @@ model Cobertura {
   horaInicio        String
   duracion          Int
   carpetaNombre     String
+  calendarEventId   String?
+  calendarHtmlLink  String?
+  calendarSyncError String?
   campusId          String?
   seccionId         String?
   lugarId           String?
@@ -521,4 +566,101 @@ model CoveragePreset {
   updatedAt   DateTime  @updatedAt
   lugar       Lugar?    @relation(fields: [lugarId], references: [id], onDelete: SetNull)
   seccion     Seccion?  @relation(fields: [seccionId], references: [id], onDelete: SetNull)
+}
+
+model FinanceTransaction {
+  id               String                   @id @default(cuid())
+  createdAt        DateTime                 @default(now())
+  updatedAt        DateTime                 @updatedAt
+  date             DateTime
+  type             FinanceTransactionType
+  owner            FinanceOwner
+  category         String
+  amount           Decimal                  @db.Decimal(12, 2)
+  currency         String                   @default("MXN")
+  description      String
+  rawMessage       String
+  alias            String?
+  memoryNote       String?
+  confidence       Decimal                  @db.Decimal(4, 3)
+  status           FinanceTransactionStatus @default(CONFIRMED)
+  specialType      FinanceSpecialType?
+  counterpartyName String?
+  sourceChannel    FinanceSourceChannel     @default(TELEGRAM)
+  reportPeriodKey  String
+  telegramChatId   String?
+  telegramMessageId String?
+  metadata         Json?
+
+  @@index([owner, date])
+  @@index([type, date])
+  @@index([reportPeriodKey, owner])
+  @@index([createdAt])
+}
+
+model FinanceTelegramChat {
+  id            String   @id @default(cuid())
+  chatId        String   @unique
+  label         String?
+  isActive      Boolean  @default(true)
+  lastSeenAt    DateTime?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+}
+
+model FinanceMonthlyDigest {
+  id         String   @id @default(cuid())
+  periodKey  String   @unique
+  sentAt     DateTime @default(now())
+  recipient  String
+  subject    String
+  provider   String   @default("resend")
+  status     String   @default("SENT")
+  metadata   Json?
+}
+
+model FinanceMemoryRule {
+  id          String                 @id @default(cuid())
+  alias       String
+  category    String
+  type        FinanceTransactionType
+  owner       FinanceOwner?
+  notes       String?
+  createdAt   DateTime               @default(now())
+  updatedAt   DateTime               @updatedAt
+  source      FinanceSourceChannel   @default(IMPORT)
+  isActive    Boolean                @default(true)
+
+  @@index([alias, isActive])
+  @@index([owner, type])
+}
+
+model FinanceCategory {
+  id          String                    @id @default(cuid())
+  slug        String                    @unique
+  label       String
+  direction   FinanceCategoryDirection
+  owner       FinanceOwner?
+  description String?
+  color       String?
+  icon        String?
+  sortOrder   Int                       @default(0)
+  isActive    Boolean                   @default(true)
+  createdAt   DateTime                  @default(now())
+  updatedAt   DateTime                  @updatedAt
+
+  @@index([direction, owner, isActive])
+  @@index([sortOrder])
+}
+
+model FinanceBotSettings {
+  id                                   String   @id @default("default")
+  transactionDefaultTemplate           String   @default("✅ Movimiento registrado\n{amount} MXN · {description}")
+  transactionLakjaExpenseTemplate      String   @default("✅ Gasto operativo LaKja registrado\n{amount} MXN · {description}")
+  transactionHonorariosKjalilTemplate  String   @default("✅ Honorarios a Kjalil registrados")
+  transactionHonorariosTercerosTemplate String  @default("✅ Honorarios a tercero registrados")
+  reportHeaderTemplate                 String   @default("📊 Reporte {ownerLabel}\nPeriodo: {periodLabel}")
+  reportFooterTemplate                 String?
+  createdAt                            DateTime @default(now())
+  updatedAt                            DateTime @updatedAt
 }

@@ -1,12 +1,12 @@
 import { redirect } from "next/navigation";
 import { NextResponse } from "next/server";
 
-import { getServerAuthSession, isAdminEmail, isSuperAdminEmail } from "@/lib/auth";
+import { getServerAuthSession, isSuperAdminEmail } from "@/lib/auth";
 
 export async function requireAdminSession(callbackUrl = "/appfotos/admin") {
   const session = await getServerAuthSession();
 
-  if (!session?.user?.email || !isAdminEmail(session.user.email)) {
+  if (!session?.user || session.user.role !== "ADMIN") {
     redirect(`/login?callbackUrl=${encodeURIComponent(callbackUrl)}`);
   }
 
@@ -16,7 +16,27 @@ export async function requireAdminSession(callbackUrl = "/appfotos/admin") {
 export async function ensureAdminApiRequest() {
   const session = await getServerAuthSession();
 
-  if (!session?.user?.email || !isAdminEmail(session.user.email)) {
+  if (!session?.user || session.user.role !== "ADMIN") {
+    return NextResponse.json({ ok: false, error: "No autenticado." }, { status: 401 });
+  }
+
+  return null;
+}
+
+export async function requireStaffSession(callbackUrl = "/coberturas") {
+  const session = await getServerAuthSession();
+
+  if (!session?.user || (session.user.role !== "ADMIN" && session.user.role !== "STAFF")) {
+    redirect(`/login?callbackUrl=${encodeURIComponent(callbackUrl)}`);
+  }
+
+  return session;
+}
+
+export async function ensureStaffApiRequest() {
+  const session = await getServerAuthSession();
+
+  if (!session?.user || (session.user.role !== "ADMIN" && session.user.role !== "STAFF")) {
     return NextResponse.json({ ok: false, error: "No autenticado." }, { status: 401 });
   }
 

@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 
 import { GoogleSignInButton } from "@/components/auth/google-sign-in-button";
+import { StaffAccessForm } from "@/components/auth/staff-access-form";
 import { getServerAuthSession } from "@/lib/auth";
 import { LogoMark } from "@/components/ui/logo";
 
@@ -28,9 +29,9 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
           <LogoMark className="h-[102px] w-[102px]" />
           <div className="space-y-3">
             <p className="text-xs font-extrabold uppercase tracking-[0.34em] text-slate-400">Panel privado</p>
-            <h1 className="text-4xl font-black tracking-tight text-slate-950 md:text-5xl">Acceso admin</h1>
+            <h1 className="text-4xl font-black tracking-tight text-slate-950 md:text-5xl">Acceso privado</h1>
             <p className="mx-auto max-w-md text-base leading-7 text-slate-500">
-              Entra con tu cuenta de Google para gestionar albumes, subir fotos y preparar entregas de clientes.
+              Admin entra con Google. Staff entra con correo y código simple.
             </p>
           </div>
         </div>
@@ -41,8 +42,24 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
           </div>
         ) : null}
 
-        <div className="mt-8">
-          <GoogleSignInButton callbackUrl={callbackUrl} />
+        <div className="mt-8 grid gap-4">
+          <div className="rounded-[28px] border border-slate-200 bg-slate-50 p-5 text-left">
+            <p className="text-xs font-extrabold uppercase tracking-[0.28em] text-slate-400">Staff</p>
+            <h2 className="mt-2 text-xl font-black tracking-tight text-slate-950">Acceso rápido</h2>
+            <p className="mt-1 text-sm text-slate-500">Usa correo y código compartido por admin.</p>
+            <div className="mt-4">
+              <StaffAccessForm callbackUrl={callbackUrl} />
+            </div>
+          </div>
+
+          <div className="rounded-[28px] border border-slate-200 bg-white p-5 text-left">
+            <p className="text-xs font-extrabold uppercase tracking-[0.28em] text-slate-400">Admin</p>
+            <h2 className="mt-2 text-xl font-black tracking-tight text-slate-950">Entrar con Google</h2>
+            <p className="mt-1 text-sm text-slate-500">Usa cuenta Google con permisos y conexión de calendario.</p>
+            <div className="mt-4">
+              <GoogleSignInButton callbackUrl={callbackUrl} />
+            </div>
+          </div>
         </div>
       </div>
     </div>

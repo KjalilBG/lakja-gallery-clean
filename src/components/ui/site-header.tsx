@@ -8,6 +8,7 @@ import { siteConfig } from "@/lib/config/site";
 export async function SiteHeader() {
   const session = await getServerAuthSession();
   const canSeePrivateApps = Boolean(session?.user?.role);
+  const canSeeSuperAdminApps = session?.user?.isSuperAdmin === true;
   const navItems = canSeePrivateApps ? siteConfig.nav.filter((item) => item.href !== "/appfotos") : siteConfig.nav;
 
   return (
@@ -27,9 +28,17 @@ export async function SiteHeader() {
                 <Link href="/appfotos/admin" className="block rounded-[14px] px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50">
                   AppFotos
                 </Link>
-                <Link href="/links" className="block rounded-[14px] px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50">
-                  Links
+                <Link href="/finance" className="block rounded-[14px] px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50">
+                  Finanzas
                 </Link>
+                <Link href="/ccc" className="block rounded-[14px] px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50">
+                  CCC
+                </Link>
+                {canSeeSuperAdminApps ? (
+                  <Link href="/links" className="block rounded-[14px] px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50">
+                    Links
+                  </Link>
+                ) : null}
               </div>
             </div>
           </details>
