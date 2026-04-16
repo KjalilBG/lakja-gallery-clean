@@ -28,8 +28,7 @@ export const siteConfig = {
   handle: "@lakja.top",
   nav: [
     { label: "Inicio", href: "/" },
-    { label: "AppFotos", href: "/appfotos" },
-    { label: "Admin", href: "/appfotos/admin" }
+    { label: "AppFotos", href: "/appfotos" }
   ],
   socials: [
     { label: "Instagram", href: "https://instagram.com/lakja.top" },
