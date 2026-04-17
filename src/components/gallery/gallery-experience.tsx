@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { ChevronLeft, ChevronRight, Download, Facebook, Heart, Images, Instagram, LoaderCircle, MessageCircle, Search, Send, X } from "lucide-react";
 
@@ -57,7 +57,7 @@ export function GalleryExperience({
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
-  const [activeIndex, setActiveIndex] = useState<number | null>(null);
+  const [activePhotoId, setActivePhotoId] = useState<string | null>(null);
   const [favoriteIds, setFavoriteIds] = useState<string[]>([]);
   const [showOnlyFavorites, setShowOnlyFavorites] = useState(false);
   const [downloadIntent, setDownloadIntent] = useState<DownloadIntent | null>(null);
@@ -75,8 +75,10 @@ export function GalleryExperience({
   const [isSendingFavorites, setIsSendingFavorites] = useState(false);
   const [sendFavoritesError, setSendFavoritesError] = useState("");
   const [origin, setOrigin] = useState("");
+  const [isActiveImageLoaded, setIsActiveImageLoaded] = useState(false);
   const touchStartX = useRef<number | null>(null);
   const touchStartY = useRef<number | null>(null);
+  const swipeLockRef = useRef(false);
   useEffect(() => {
     try {
       const rawValue = window.localStorage.getItem(storageKey);
@@ -116,13 +118,31 @@ export function GalleryExperience({
     setOrigin(window.location.origin);
   }, []);
 
+  const updatePhotoParam = useCallback(
+    (photoId: string | null) => {
+      const params = new URLSearchParams(searchParams.toString());
+
+      if (photoId) {
+        params.set("photo", photoId);
+      } else {
+        params.delete("photo");
+      }
+
+      const nextQuery = params.toString();
+      router.replace(nextQuery ? `${pathname}?${nextQuery}` : pathname, { scroll: false });
+    },
+    [pathname, router, searchParams]
+  );
+
+  const favoriteIdSet = useMemo(() => new Set(favoriteIds), [favoriteIds]);
+
   const photosWithFavorites = useMemo(
     () =>
       photos.map((photo) => ({
         ...photo,
-        isFavorite: favoriteIds.includes(photo.id)
+        isFavorite: favoriteIdSet.has(photo.id)
       })),
-    [favoriteIds, photos]
+    [favoriteIdSet, photos]
   );
 
   const visiblePhotos = useMemo(
@@ -140,69 +160,83 @@ export function GalleryExperience({
     [photosWithFavorites, showOnlyFavorites, bibQuery, bibRecognitionEnabled]
   );
 
-  const activePhoto = activeIndex === null ? null : visiblePhotos[activeIndex];
-  const activePosition = activeIndex === null ? 0 : activeIndex + 1;
+  const activeIndex = activePhotoId ? visiblePhotos.findIndex((photo) => photo.id === activePhotoId) : -1;
+  const activePhoto = activeIndex >= 0 ? visiblePhotos[activeIndex] : null;
+  const activePosition = activeIndex >= 0 ? activeIndex + 1 : 0;
   const activePhotoUrl = activePhoto && origin ? `${origin}${pathname}?photo=${encodeURIComponent(activePhoto.id)}` : null;
 
   useEffect(() => {
-    if (activeIndex === null) return;
-    if (activeIndex <= visiblePhotos.length - 1) return;
-    setActiveIndex(visiblePhotos.length > 0 ? visiblePhotos.length - 1 : null);
-  }, [activeIndex, visiblePhotos.length]);
+    if (!activePhotoId) return;
+    if (activeIndex >= 0) return;
+
+    setActivePhotoId(null);
+    updatePhotoParam(null);
+  }, [activeIndex, activePhotoId, updatePhotoParam]);
 
   useEffect(() => {
     const photoId = searchParams.get("photo");
 
     if (!photoId) {
-      if (activeIndex !== null) {
-        setActiveIndex(null);
+      if (activePhotoId !== null) {
+        setActivePhotoId(null);
       }
       return;
     }
 
-    const nextIndex = visiblePhotos.findIndex((photo) => photo.id === photoId);
-    if (nextIndex >= 0 && nextIndex !== activeIndex) {
-      setActiveIndex(nextIndex);
+    if (photoId !== activePhotoId) {
+      setActivePhotoId(photoId);
     }
-    if (nextIndex < 0 && activeIndex !== null) {
-      setActiveIndex(null);
-    }
-  }, [activeIndex, searchParams, visiblePhotos]);
+  }, [activePhotoId, searchParams]);
 
   useEffect(() => {
-    if (activeIndex === null) return;
+    setIsActiveImageLoaded(false);
+  }, [activePhotoId]);
+
+  useEffect(() => {
+    if (activeIndex < 0 || visiblePhotos.length <= 1) {
+      return;
+    }
+
+    const nextPhoto = visiblePhotos[(activeIndex + 1) % visiblePhotos.length];
+    const previousPhoto = visiblePhotos[(activeIndex - 1 + visiblePhotos.length) % visiblePhotos.length];
+    [nextPhoto, previousPhoto].forEach((photo) => {
+      const image = new Image();
+      image.src = photo.url;
+    });
+  }, [activeIndex, visiblePhotos]);
+
+  useEffect(() => {
+    if (!activePhotoId) return;
 
     function onKeyDown(event: KeyboardEvent) {
       if (event.key === "Escape") {
         event.preventDefault();
-        setActiveIndex(null);
+        setActivePhotoId(null);
         updatePhotoParam(null);
       }
 
       if (event.key === "ArrowLeft") {
         event.preventDefault();
-        setActiveIndex((current) => {
-          if (current === null) return current;
-          const next = current === 0 ? visiblePhotos.length - 1 : current - 1;
-          const nextPhoto = visiblePhotos[next];
-          if (nextPhoto) {
-            updatePhotoParam(nextPhoto.id);
-          }
-          return next;
-        });
+        if (visiblePhotos.length === 0) return;
+        const baseIndex = activeIndex >= 0 ? activeIndex : 0;
+        const nextIndex = baseIndex === 0 ? visiblePhotos.length - 1 : baseIndex - 1;
+        const nextPhoto = visiblePhotos[nextIndex];
+        if (!nextPhoto) return;
+
+        setActivePhotoId(nextPhoto.id);
+        updatePhotoParam(nextPhoto.id);
       }
 
       if (event.key === "ArrowRight") {
         event.preventDefault();
-        setActiveIndex((current) => {
-          if (current === null) return current;
-          const next = current === visiblePhotos.length - 1 ? 0 : current + 1;
-          const nextPhoto = visiblePhotos[next];
-          if (nextPhoto) {
-            updatePhotoParam(nextPhoto.id);
-          }
-          return next;
-        });
+        if (visiblePhotos.length === 0) return;
+        const baseIndex = activeIndex >= 0 ? activeIndex : 0;
+        const nextIndex = baseIndex === visiblePhotos.length - 1 ? 0 : baseIndex + 1;
+        const nextPhoto = visiblePhotos[nextIndex];
+        if (!nextPhoto) return;
+
+        setActivePhotoId(nextPhoto.id);
+        updatePhotoParam(nextPhoto.id);
       }
     }
 
@@ -213,31 +247,31 @@ export function GalleryExperience({
       window.removeEventListener("keydown", onKeyDown);
       document.body.style.overflow = "";
     };
-  }, [activeIndex, visiblePhotos.length]);
+  }, [activeIndex, activePhotoId, updatePhotoParam, visiblePhotos]);
 
-  function goPrevious() {
+  const goPrevious = useCallback(() => {
     if (visiblePhotos.length === 0) return;
-    setActiveIndex((current) => {
-      const nextIndex = current === null ? 0 : current === 0 ? visiblePhotos.length - 1 : current - 1;
-      const nextPhoto = visiblePhotos[nextIndex];
-      if (nextPhoto) {
-        updatePhotoParam(nextPhoto.id);
-      }
-      return nextIndex;
-    });
-  }
 
-  function goNext() {
+    const baseIndex = activeIndex >= 0 ? activeIndex : 0;
+    const nextIndex = baseIndex === 0 ? visiblePhotos.length - 1 : baseIndex - 1;
+    const nextPhoto = visiblePhotos[nextIndex];
+    if (!nextPhoto) return;
+
+    setActivePhotoId(nextPhoto.id);
+    updatePhotoParam(nextPhoto.id);
+  }, [activeIndex, updatePhotoParam, visiblePhotos]);
+
+  const goNext = useCallback(() => {
     if (visiblePhotos.length === 0) return;
-    setActiveIndex((current) => {
-      const nextIndex = current === null ? 0 : current === visiblePhotos.length - 1 ? 0 : current + 1;
-      const nextPhoto = visiblePhotos[nextIndex];
-      if (nextPhoto) {
-        updatePhotoParam(nextPhoto.id);
-      }
-      return nextIndex;
-    });
-  }
+
+    const baseIndex = activeIndex >= 0 ? activeIndex : 0;
+    const nextIndex = baseIndex === visiblePhotos.length - 1 ? 0 : baseIndex + 1;
+    const nextPhoto = visiblePhotos[nextIndex];
+    if (!nextPhoto) return;
+
+    setActivePhotoId(nextPhoto.id);
+    updatePhotoParam(nextPhoto.id);
+  }, [activeIndex, updatePhotoParam, visiblePhotos]);
 
   function handleViewerTouchStart(event: React.TouchEvent<HTMLDivElement>) {
     const touch = event.touches[0];
@@ -246,6 +280,10 @@ export function GalleryExperience({
   }
 
   function handleViewerTouchEnd(event: React.TouchEvent<HTMLDivElement>) {
+    if (swipeLockRef.current) {
+      return;
+    }
+
     const startX = touchStartX.current;
     const startY = touchStartY.current;
     const touch = event.changedTouches[0];
@@ -263,6 +301,11 @@ export function GalleryExperience({
     if (Math.abs(deltaX) < 56 || Math.abs(deltaX) <= Math.abs(deltaY) * 1.15) {
       return;
     }
+
+    swipeLockRef.current = true;
+    window.setTimeout(() => {
+      swipeLockRef.current = false;
+    }, 180);
 
     if (deltaX < 0) {
       goNext();
@@ -283,7 +326,7 @@ export function GalleryExperience({
     });
   }
 
-  function getSessionId() {
+  const getSessionId = useCallback(() => {
     const sessionStorageKey = `${storageKey}-session`;
     const existingValue = window.localStorage.getItem(sessionStorageKey);
 
@@ -294,7 +337,7 @@ export function GalleryExperience({
     const nextValue = window.crypto.randomUUID();
     window.localStorage.setItem(sessionStorageKey, nextValue);
     return nextValue;
-  }
+  }, [storageKey]);
 
   useEffect(() => {
     const viewedKey = `${storageKey}-viewed`;
@@ -318,7 +361,7 @@ export function GalleryExperience({
         }
       })
       .catch(() => undefined);
-  }, [slug, storageKey]);
+  }, [getSessionId, slug, storageKey]);
 
   useEffect(() => {
     if (!favoritesHydrated) {
@@ -342,7 +385,7 @@ export function GalleryExperience({
     return () => {
       window.clearTimeout(timeoutId);
     };
-  }, [favoriteIds, favoritesHydrated, slug]);
+  }, [favoriteIds, favoritesHydrated, getSessionId, slug]);
 
   async function submitFavorites() {
     if (favoriteIds.length === 0 || isSendingFavorites) return;
@@ -499,7 +542,7 @@ export function GalleryExperience({
   const resolvedActivePhoto = activePhoto
     ? {
         ...activePhoto,
-        isFavorite: favoriteIds.includes(activePhoto.id)
+        isFavorite: favoriteIdSet.has(activePhoto.id)
       }
     : null;
   const canShowFavoritesFlow = favoritesEnabled;
@@ -507,29 +550,16 @@ export function GalleryExperience({
   const canShowFullDownload = downloadsEnabled && allowFullDownload;
   const canShowSingleDownload = downloadsEnabled && allowSingleDownload;
 
-  function updatePhotoParam(photoId: string | null) {
-    const params = new URLSearchParams(searchParams.toString());
-
-    if (photoId) {
-      params.set("photo", photoId);
-    } else {
-      params.delete("photo");
-    }
-
-    const nextQuery = params.toString();
-    router.replace(nextQuery ? `${pathname}?${nextQuery}` : pathname, { scroll: false });
-  }
-
   function openPhoto(index: number) {
     const photo = visiblePhotos[index];
     if (photo) {
-      setActiveIndex(index);
+      setActivePhotoId(photo.id);
       updatePhotoParam(photo.id);
     }
   }
 
   function closePhotoViewer() {
-    setActiveIndex(null);
+    setActivePhotoId(null);
     updatePhotoParam(null);
   }
 
@@ -677,10 +707,26 @@ export function GalleryExperience({
               <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_260px] lg:items-center xl:gap-6">
                 <div
                   className="relative overflow-hidden rounded-[24px] border border-slate-200 bg-white shadow-[0_24px_60px_rgba(15,23,42,0.14)] sm:rounded-[34px]"
-                  onTouchStart={handleViewerTouchStart}
-                  onTouchEnd={handleViewerTouchEnd}
                 >
-                  <img src={resolvedActivePhoto.url} alt={resolvedActivePhoto.title} className="max-h-[72vh] w-full object-contain bg-[#fcfcfb] sm:max-h-[82vh]" />
+                  {resolvedActivePhoto.thumbUrl ? (
+                    <img
+                      src={resolvedActivePhoto.thumbUrl}
+                      alt=""
+                      aria-hidden="true"
+                      className={`absolute inset-0 h-full w-full object-contain bg-[#fcfcfb] blur-sm transition-opacity duration-200 ${
+                        isActiveImageLoaded ? "opacity-0" : "opacity-100"
+                      }`}
+                    />
+                  ) : null}
+                  <img
+                    key={resolvedActivePhoto.id}
+                    src={resolvedActivePhoto.url}
+                    alt={resolvedActivePhoto.title}
+                    onLoad={() => setIsActiveImageLoaded(true)}
+                    className={`max-h-[72vh] w-full object-contain bg-[#fcfcfb] transition-opacity duration-200 sm:max-h-[82vh] ${
+                      isActiveImageLoaded || !resolvedActivePhoto.thumbUrl ? "opacity-100" : "opacity-0"
+                    }`}
+                  />
                   <div className="absolute left-4 top-4 text-xs font-extrabold tracking-[0.18em] text-white drop-shadow-[0_6px_18px_rgba(15,23,42,0.62)] sm:left-5 sm:top-5 sm:text-sm">
                     {resolvedActivePhoto.isCover ? "IMPORTADA" : `${activePosition}`}
                   </div>
