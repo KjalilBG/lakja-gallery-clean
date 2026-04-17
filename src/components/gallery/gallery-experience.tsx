@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { usePathname, useSearchParams } from "next/navigation";
 import { ChevronLeft, ChevronRight, Download, Facebook, Heart, Images, Instagram, LoaderCircle, MessageCircle, Search, Send, X } from "lucide-react";
 
 import type { GalleryPhoto } from "@/features/albums/types";
@@ -54,10 +54,9 @@ export function GalleryExperience({
   downloadPopupTitle,
   downloadPopupBody
 }: GalleryExperienceProps) {
-  const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
-  const [activePhotoId, setActivePhotoId] = useState<string | null>(null);
+  const [activePhotoId, setActivePhotoId] = useState<string | null>(() => searchParams.get("photo"));
   const [favoriteIds, setFavoriteIds] = useState<string[]>([]);
   const [showOnlyFavorites, setShowOnlyFavorites] = useState(false);
   const [downloadIntent, setDownloadIntent] = useState<DownloadIntent | null>(null);
@@ -118,22 +117,6 @@ export function GalleryExperience({
     setOrigin(window.location.origin);
   }, []);
 
-  const updatePhotoParam = useCallback(
-    (photoId: string | null) => {
-      const params = new URLSearchParams(searchParams.toString());
-
-      if (photoId) {
-        params.set("photo", photoId);
-      } else {
-        params.delete("photo");
-      }
-
-      const nextQuery = params.toString();
-      router.replace(nextQuery ? `${pathname}?${nextQuery}` : pathname, { scroll: false });
-    },
-    [pathname, router, searchParams]
-  );
-
   const favoriteIdSet = useMemo(() => new Set(favoriteIds), [favoriteIds]);
 
   const photosWithFavorites = useMemo(
@@ -170,23 +153,7 @@ export function GalleryExperience({
     if (activeIndex >= 0) return;
 
     setActivePhotoId(null);
-    updatePhotoParam(null);
-  }, [activeIndex, activePhotoId, updatePhotoParam]);
-
-  useEffect(() => {
-    const photoId = searchParams.get("photo");
-
-    if (!photoId) {
-      if (activePhotoId !== null) {
-        setActivePhotoId(null);
-      }
-      return;
-    }
-
-    if (photoId !== activePhotoId) {
-      setActivePhotoId(photoId);
-    }
-  }, [activePhotoId, searchParams]);
+  }, [activeIndex, activePhotoId]);
 
   useEffect(() => {
     setIsActiveImageLoaded(false);
@@ -212,7 +179,6 @@ export function GalleryExperience({
       if (event.key === "Escape") {
         event.preventDefault();
         setActivePhotoId(null);
-        updatePhotoParam(null);
       }
 
       if (event.key === "ArrowLeft") {
@@ -224,7 +190,6 @@ export function GalleryExperience({
         if (!nextPhoto) return;
 
         setActivePhotoId(nextPhoto.id);
-        updatePhotoParam(nextPhoto.id);
       }
 
       if (event.key === "ArrowRight") {
@@ -236,7 +201,6 @@ export function GalleryExperience({
         if (!nextPhoto) return;
 
         setActivePhotoId(nextPhoto.id);
-        updatePhotoParam(nextPhoto.id);
       }
     }
 
@@ -247,7 +211,7 @@ export function GalleryExperience({
       window.removeEventListener("keydown", onKeyDown);
       document.body.style.overflow = "";
     };
-  }, [activeIndex, activePhotoId, updatePhotoParam, visiblePhotos]);
+  }, [activeIndex, activePhotoId, visiblePhotos]);
 
   const goPrevious = useCallback(() => {
     if (visiblePhotos.length === 0) return;
@@ -258,8 +222,7 @@ export function GalleryExperience({
     if (!nextPhoto) return;
 
     setActivePhotoId(nextPhoto.id);
-    updatePhotoParam(nextPhoto.id);
-  }, [activeIndex, updatePhotoParam, visiblePhotos]);
+  }, [activeIndex, visiblePhotos]);
 
   const goNext = useCallback(() => {
     if (visiblePhotos.length === 0) return;
@@ -270,8 +233,7 @@ export function GalleryExperience({
     if (!nextPhoto) return;
 
     setActivePhotoId(nextPhoto.id);
-    updatePhotoParam(nextPhoto.id);
-  }, [activeIndex, updatePhotoParam, visiblePhotos]);
+  }, [activeIndex, visiblePhotos]);
 
   function handleViewerTouchStart(event: React.TouchEvent<HTMLDivElement>) {
     const touch = event.touches[0];
@@ -554,13 +516,11 @@ export function GalleryExperience({
     const photo = visiblePhotos[index];
     if (photo) {
       setActivePhotoId(photo.id);
-      updatePhotoParam(photo.id);
     }
   }
 
   function closePhotoViewer() {
     setActivePhotoId(null);
-    updatePhotoParam(null);
   }
 
   return (
